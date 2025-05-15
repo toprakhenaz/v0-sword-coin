@@ -1,44 +1,40 @@
 import {
   faUser,
   faCoins,
-  faFire,
-  faArrowUp,
-  faCopy,
-  faCheck,
-  faPlus,
+  faXmark,
+  faStar,
   faChevronLeft,
   faChevronRight,
   faChevronUp,
   faChevronDown,
-  faStar,
-  faHammer, // Using faHammer instead of faSwords
-  faRocket,
-  faGift,
-  faBolt,
-  faTrophy,
-  faInfoCircle,
-  faHeart,
-  faGamepad,
-  faExternalLinkAlt,
-  faUserPlus,
-} from "@fortawesome/free-solid-svg-icons"
-
-import {
-  faXmark,
+  faCheck,
   faHourglassStart,
   faAngleDoubleUp,
   faArrowRight,
+  faBolt,
+  faRocket,
   faClock,
+  faInfoCircle,
   faQuestion,
+  faGift,
+  faExternalLinkAlt,
+  faCopy,
   faHome,
   faUserGroup,
+  // Removed faSwords completely
+  faHeart,
   faSignal,
+  faGamepad,
+  faArrowUp,
+  faFire,
+  faPlus,
+  faTrophy,
 } from "@fortawesome/free-solid-svg-icons"
 
 // Create the icons object
 export const icons = {
   coins: faCoins,
-  times: faXmark, // Using the newer faXmark instead of faTimes
+  times: faXmark,
   star: faStar,
   chevronLeft: faChevronLeft,
   chevronRight: faChevronRight,
@@ -58,7 +54,8 @@ export const icons = {
   copy: faCopy,
   home: faHome,
   userGroup: faUserGroup,
-  swords: faHammer, // Using faHammer as a replacement for faSwords
+  // Using faHammer as a replacement for swords
+  swords: faUser, // Temporarily using faUser instead of swords
   heart: faHeart,
   signal: faSignal,
   gamepad: faGamepad,
@@ -69,5 +66,5 @@ export const icons = {
   user: faUser,
 }
 
-// Export the icons object as the default export as well
-export default { icons }
+// Export the icons object
+export default icons
