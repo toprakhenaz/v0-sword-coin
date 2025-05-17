@@ -1,18 +1,19 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Poppins } from "next/font/google"
 import "./globals.css"
-import { SupabaseProvider } from "@/providers/SupabaseProvider"
-import { Toaster } from "react-hot-toast"
-import Script from "next/script"
-import { UserProvider } from "@/providers/UserProvider"
-import { DeviceDetectionProvider } from "@/providers/DeviceDetectionProvider"
+import { ThemeProvider } from "@/components/theme-provider"
+import Navigation from "@/components/navigation"
+import TelegramInit from "@/components/telegram-init"
 
-const inter = Inter({ subsets: ["latin"] })
+const poppins = Poppins({
+  weight: ["400", "500", "600", "700"],
+  subsets: ["latin"],
+})
 
 export const metadata: Metadata = {
   title: "Sword Coin",
-  description: "Earn coins, upgrade your swords, and compete with friends!",
+  description: "Tap-to-Earn Telegram Mini App",
     generator: 'v0.dev'
 }
 
@@ -22,20 +23,16 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-        <Script src="https://telegram.org/js/telegram-web-app.js" />
-      </head>
-      <body className={`${inter.className} bg-gray-900 text-white overflow-x-hidden`}>
-        <SupabaseProvider>
-          <UserProvider>
-            <DeviceDetectionProvider>
-              {children}
-              <Toaster position="top-center" />
-            </DeviceDetectionProvider>
-          </UserProvider>
-        </SupabaseProvider>
+    <html lang="tr" suppressHydrationWarning>
+      <body className={`${poppins.className} bg-[#121724] text-white`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+          <TelegramInit>
+            <div className="w-full max-w-md mx-auto min-h-screen h-full flex flex-col relative overflow-hidden">
+              <main className="flex-1 overflow-auto pt-safe-top pb-20 px-safe-left pr-safe-right">{children}</main>
+              <Navigation />
+            </div>
+          </TelegramInit>
+        </ThemeProvider>
       </body>
     </html>
   )
