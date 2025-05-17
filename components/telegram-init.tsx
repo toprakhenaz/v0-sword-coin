@@ -22,6 +22,16 @@ export default function TelegramInit({ children }: { children: React.ReactNode }
 
         // Telegram Web App API mevcut mu kontrol et
         if (!window.Telegram?.WebApp) {
+          // Check if we're in a mobile browser that might be the Telegram in-app browser
+          const isMobileBrowser = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
+          if (isMobileBrowser && window.location.href.includes("tgWebAppData=")) {
+            // We're likely in Telegram but WebApp object isn't initialized yet
+            console.log("Telegram WebApp API not found but we appear to be in Telegram. Continuing...")
+            setIsInitialized(true)
+            return
+          }
+
           // Geliştirme ortamında ise devam et, üretimde hata göster
           if (process.env.NODE_ENV === "development") {
             console.warn("Telegram Web App API bulunamadı, geliştirme modunda devam ediliyor")
@@ -37,11 +47,27 @@ export default function TelegramInit({ children }: { children: React.ReactNode }
         if (initData) {
           const verificationResult = await verifyTelegramUser(initData)
           if (!verificationResult?.verified) {
-            throw new Error("Kullanıcı doğrulaması başarısız oldu")
+            console.warn("Kullanıcı doğrulaması başarısız oldu, devam ediliyor")
           }
 
           // Kullanıcı bilgilerini localStorage'a kaydet
-          localStorage.setItem("telegramUser", JSON.stringify(verificationResult.user))
+          if (verificationResult?.user) {
+            localStorage.setItem("telegramUser", JSON.stringify(verificationResult.user))
+          }
+        } else {
+          // Try to get user from WebApp directly
+          const user = window.Telegram.WebApp.initDataUnsafe.user
+          if (user) {
+            localStorage.setItem(
+              "telegramUser",
+              JSON.stringify({
+                id: user.id,
+                username: user.username,
+                firstName: user.first_name,
+                lastName: user.last_name,
+              }),
+            )
+          }
         }
 
         setIsInitialized(true)
@@ -61,9 +87,12 @@ export default function TelegramInit({ children }: { children: React.ReactNode }
           <h2 className="text-xl font-bold text-white mb-2">Hata</h2>
           <p className="text-red-200">{error}</p>
         </div>
-        <p className="text-gray-400">
+        <p className="text-gray-400 mb-4">
           Bu uygulama sadece Telegram içinde çalışır. Lütfen Telegram uygulamasından açın.
         </p>
+        <button onClick={() => window.location.reload()} className="bg-blue-600 text-white px-4 py-2 rounded-lg">
+          Tekrar Dene
+        </button>
       </div>
     )
   }

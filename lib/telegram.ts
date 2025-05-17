@@ -75,60 +75,87 @@ declare global {
 
 // Telegram Web App API'sini başlat
 export function initTelegramWebApp() {
-  if (typeof window !== "undefined" && window.Telegram) {
-    // Telegram Web App'e hazır olduğumuzu bildir
-    window.Telegram.WebApp.ready()
+  if (typeof window !== "undefined") {
+    // If Telegram WebApp is available, use it
+    if (window.Telegram?.WebApp) {
+      // Telegram Web App'e hazır olduğumuzu bildir
+      window.Telegram.WebApp.ready()
 
-    // Tam ekran modunu etkinleştir
-    window.Telegram.WebApp.expand()
+      // Tam ekran modunu etkinleştir
+      window.Telegram.WebApp.expand()
 
-    // Arka plan rengini ayarla
-    window.Telegram.WebApp.setBackgroundColor("#121724")
+      // Arka plan rengini ayarla
+      window.Telegram.WebApp.setBackgroundColor("#121724")
 
-    // Haptic feedback için yardımcı fonksiyon
-    return {
-      getUserInfo: () => window.Telegram.WebApp.initDataUnsafe.user,
-      vibrate: (style: "light" | "medium" | "heavy" = "medium") => {
-        if (window.Telegram.WebApp.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.impactOccurred(style)
-        } else if (navigator.vibrate) {
-          // Fallback olarak Web Vibration API kullan
-          switch (style) {
-            case "light":
-              navigator.vibrate(10)
-              break
-            case "medium":
-              navigator.vibrate(20)
-              break
-            case "heavy":
-              navigator.vibrate([30, 20, 30])
-              break
-            case "rigid":
-              navigator.vibrate([10, 10, 10])
-              break
-            case "soft":
-              navigator.vibrate(5)
-              break
+      // Haptic feedback için yardımcı fonksiyon
+      return {
+        getUserInfo: () => window.Telegram.WebApp.initDataUnsafe.user,
+        vibrate: (style: "light" | "medium" | "heavy" = "medium") => {
+          if (window.Telegram.WebApp.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.impactOccurred(style)
+          } else if (navigator.vibrate) {
+            // Fallback olarak Web Vibration API kullan
+            switch (style) {
+              case "light":
+                navigator.vibrate(10)
+                break
+              case "medium":
+                navigator.vibrate(20)
+                break
+              case "heavy":
+                navigator.vibrate([30, 20, 30])
+                break
+              case "rigid":
+                navigator.vibrate([10, 10, 10])
+                break
+              case "soft":
+                navigator.vibrate(5)
+                break
+            }
           }
+        },
+        showNotification: (type: "error" | "success" | "warning", message?: string) => {
+          if (window.Telegram.WebApp.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.notificationOccurred(type)
+          }
+          if (message) {
+            window.Telegram.WebApp.showAlert(message)
+          }
+        },
+        showMainButton: (text: string, callback: () => void) => {
+          const mainButton = window.Telegram.WebApp.MainButton
+          mainButton.setText(text)
+          mainButton.onClick(callback)
+          mainButton.show()
+        },
+        hideMainButton: () => {
+          window.Telegram.WebApp.MainButton.hide()
+        },
+      }
+    }
+
+    // Check if we're in a mobile browser that might be the Telegram in-app browser
+    const isMobileBrowser = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
+    const mightBeTelegram =
+      isMobileBrowser &&
+      (window.location.href.includes("tgWebAppData=") ||
+        document.referrer.includes("t.me/") ||
+        navigator.userAgent.includes("Telegram"))
+
+    if (mightBeTelegram) {
+      console.log("Might be in Telegram but WebApp API not available yet")
+
+      // Try to wait for Telegram WebApp to initialize
+      const checkInterval = setInterval(() => {
+        if (window.Telegram?.WebApp) {
+          clearInterval(checkInterval)
+          window.location.reload() // Reload to initialize properly
         }
-      },
-      showNotification: (type: "error" | "success" | "warning", message?: string) => {
-        if (window.Telegram.WebApp.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.notificationOccurred(type)
-        }
-        if (message) {
-          window.Telegram.WebApp.showAlert(message)
-        }
-      },
-      showMainButton: (text: string, callback: () => void) => {
-        const mainButton = window.Telegram.WebApp.MainButton
-        mainButton.setText(text)
-        mainButton.onClick(callback)
-        mainButton.show()
-      },
-      hideMainButton: () => {
-        window.Telegram.WebApp.MainButton.hide()
-      },
+      }, 500)
+
+      // Clear interval after 5 seconds to prevent infinite checking
+      setTimeout(() => clearInterval(checkInterval), 5000)
     }
   }
 
