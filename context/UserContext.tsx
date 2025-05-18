@@ -37,6 +37,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [hourlyEarn, setHourlyEarn] = useState(0)
   const [league, setLeague] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
+  const [lastEnergyUpdate, setLastEnergyUpdate] = useState<Date>(new Date())
 
   // Initialize user data
   useEffect(() => {
@@ -61,6 +62,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setEarnPerTap(existingUser.earn_per_tap)
           setHourlyEarn(existingUser.hourly_earn)
           setLeague(existingUser.league)
+          setLastEnergyUpdate(new Date(existingUser.last_energy_regen))
         } else {
           // Create new user
           const { data: newUser } = await supabase
@@ -75,6 +77,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 earn_per_tap: 1,
                 energy: 100,
                 max_energy: 100,
+                last_energy_regen: new Date().toISOString(),
               },
             ])
             .select()
@@ -88,9 +91,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
             setEarnPerTap(newUser.earn_per_tap)
             setHourlyEarn(newUser.hourly_earn)
             setLeague(newUser.league)
+            setLastEnergyUpdate(new Date())
 
             // Create initial boosts
-            await supabase.from("user_boosts").insert([{ user_id: newUser.id }])
+            await supabase.from("user_boosts").insert([
+              {
+                user_id: newUser.id,
+                multi_touch_level: 1,
+                energy_limit_level: 1,
+                charge_speed_level: 1,
+                daily_rockets: 3,
+                max_daily_rockets: 3,
+                energy_full_used: false,
+              },
+            ])
           }
         }
 
@@ -103,6 +117,56 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     initUser()
   }, [])
+
+  // Auto regenerate energy based on time passed
+  useEffect(() => {
+    // Calculate energy to regenerate based on time passed since last update
+    if (userId && energy < maxEnergy) {
+      const now = new Date()
+      const timeDiffMs = now.getTime() - lastEnergyUpdate.getTime()
+      const minutesPassed = timeDiffMs / (1000 * 60)
+
+      // Base regeneration: 1 energy per minute, modified by charge speed level
+      const chargeMultiplier = 1 // This should be based on the charge_speed_level
+      const energyToAdd = Math.floor(minutesPassed * chargeMultiplier)
+
+      if (energyToAdd > 0) {
+        const newEnergy = Math.min(maxEnergy, energy + energyToAdd)
+        setEnergy(newEnergy)
+        setLastEnergyUpdate(now)
+
+        // Update in database
+        supabase
+          .from("users")
+          .update({
+            energy: newEnergy,
+            last_energy_regen: now.toISOString(),
+          })
+          .eq("id", userId)
+          .then(() => {
+            console.log("Energy updated based on time passed")
+          })
+          .catch((error) => {
+            console.error("Error updating energy:", error)
+          })
+      }
+    }
+  }, [userId, energy, maxEnergy, lastEnergyUpdate])
+
+  // Energy regeneration timer
+  useEffect(() => {
+    let energyInterval: NodeJS.Timeout | null = null
+
+    if (userId && energy < maxEnergy) {
+      energyInterval = setInterval(() => {
+        updateEnergy(1)
+      }, 60000) // 1 minute
+    }
+
+    return () => {
+      if (energyInterval) clearInterval(energyInterval)
+    }
+  }, [userId, energy, maxEnergy])
 
   // Update coins in state and database
   const updateCoins = async (amount: number, transactionType: string, description?: string) => {
@@ -130,6 +194,51 @@ export function UserProvider({ children }: { children: ReactNode }) {
         description,
       },
     ])
+
+    // Check if user should be promoted to next league
+    if (amount > 0) {
+      checkAndUpdateLeague(newCoins)
+    }
+  }
+
+  // Check and update league based on coin count
+  const checkAndUpdateLeague = async (coinCount: number) => {
+    if (!userId) return
+
+    // League thresholds
+    const leagueThresholds = [
+      0, // League 1 (Wooden)
+      10000, // League 2 (Bronze)
+      100000, // League 3 (Iron)
+      1000000, // League 4 (Steel)
+      10000000, // League 5 (Adamantite)
+      100000000, // League 6 (Legendary)
+      1000000000, // League 7 (Dragon)
+    ]
+
+    // Determine new league
+    let newLeague = 1
+    for (let i = leagueThresholds.length - 1; i >= 0; i--) {
+      if (coinCount >= leagueThresholds[i]) {
+        newLeague = i + 1
+        break
+      }
+    }
+
+    // Update league if changed
+    if (newLeague > league) {
+      setLeague(newLeague)
+
+      await supabase
+        .from("users")
+        .update({
+          league: newLeague,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId)
+
+      // TODO: Show league promotion notification
+    }
   }
 
   // Update energy in state and database
@@ -138,17 +247,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Calculate new energy (ensure it doesn't go below 0 or above max)
     const newEnergy = Math.max(0, Math.min(maxEnergy, energy + amount))
-    setEnergy(newEnergy)
 
-    // Update in database
-    await supabase
-      .from("users")
-      .update({
-        energy: newEnergy,
-        last_energy_regen: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
+    // Only update if energy changed
+    if (newEnergy !== energy) {
+      setEnergy(newEnergy)
+      setLastEnergyUpdate(new Date())
+
+      // Update in database
+      await supabase
+        .from("users")
+        .update({
+          energy: newEnergy,
+          last_energy_regen: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId)
+    }
   }
 
   // Refresh user data from database
@@ -164,6 +278,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setEarnPerTap(user.earn_per_tap)
       setHourlyEarn(user.hourly_earn)
       setLeague(user.league)
+      setLastEnergyUpdate(new Date(user.last_energy_regen))
     }
   }
 

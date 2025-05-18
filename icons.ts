@@ -21,6 +21,10 @@ import {
   faHandPointer,
   faBatteryFull,
   faBatteryHalf,
+  faSearch,
+  faSort,
+  faPlus,
+  faFilter,
 } from "@fortawesome/free-solid-svg-icons"
 
 export const icons = {
@@ -46,4 +50,8 @@ export const icons = {
   handPointer: faHandPointer,
   batteryFull: faBatteryFull,
   batteryHalf: faBatteryHalf,
+  search: faSearch,
+  sort: faSort,
+  plus: faPlus,
+  filter: faFilter,
 }

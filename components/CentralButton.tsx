@@ -54,7 +54,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     for (let i = 0; i < numCount; i++) {
       // Random position around the button center
       const angle = Math.random() * Math.PI * 2
-      const distance = 20 + Math.random() * 30
+      const distance = 20 + Math.random() * 40
       newNumbers.push({
         id: nextId + i,
         value: 6, // This should be the earnPerTap value
@@ -80,20 +80,45 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
 
   return (
     <div className="flex items-center justify-center relative">
-      {/* Pulsating ring animation */}
+      {/* Pulsating rings animation */}
       <div
-        className="absolute w-56 h-56 rounded-full opacity-20 animate-pulse"
+        className="absolute w-60 h-60 rounded-full opacity-20 animate-pulse"
         style={{
-          background: `radial-gradient(circle, ${colors.secondary}, ${colors.primary})`,
+          background: `radial-gradient(circle, ${colors.secondary}80, ${colors.primary}20)`,
+          animationDuration: "3s",
         }}
       ></div>
       <div
         className="absolute w-52 h-52 rounded-full opacity-15 animate-pulse"
         style={{
-          animationDelay: "0.5s",
-          background: `radial-gradient(circle, ${colors.secondary}, ${colors.primary})`,
+          animationDelay: "1.5s",
+          animationDuration: "2.5s",
+          background: `radial-gradient(circle, ${colors.secondary}60, ${colors.primary}10)`,
         }}
       ></div>
+
+      {/* Particles around the button */}
+      {[...Array(12)].map((_, i) => {
+        const angle = (i / 12) * Math.PI * 2
+        const radius = 140 + Math.sin(Date.now() / 1000 + i) * 10
+        const size = 2 + Math.random() * 4
+        return (
+          <div
+            key={i}
+            className="absolute rounded-full animate-pulse"
+            style={{
+              width: `${size}px`,
+              height: `${size}px`,
+              left: `calc(50% + ${Math.cos(angle) * radius}px)`,
+              top: `calc(50% + ${Math.sin(angle) * radius}px)`,
+              background: `${colors.secondary}`,
+              boxShadow: `0 0 10px ${colors.glow}`,
+              animationDuration: `${2 + (i % 3)}s`,
+              zIndex: 5,
+            }}
+          />
+        )
+      })}
 
       {/* Floating numbers */}
       {floatingNumbers.map((num) => (
@@ -121,14 +146,14 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
         className="relative overflow-hidden z-10"
         onClick={handleButtonPress}
         style={{
-          width: "13rem",
-          height: "13rem",
+          width: "14rem",
+          height: "14rem",
           borderRadius: "50%",
-          border: `8px solid ${colors.secondary}`,
-          background: `linear-gradient(135deg, ${colors.secondary}80, ${colors.primary})`,
+          border: `12px solid ${colors.secondary}`,
+          background: `radial-gradient(circle, ${colors.secondary}80, ${colors.primary})`,
           boxShadow: isPressed
-            ? `0 0 25px ${colors.glow}, inset 0 0 20px rgba(255, 255, 255, 0.5)`
-            : `0 0 15px ${colors.glow}, inset 0 0 10px rgba(255, 255, 255, 0.3)`,
+            ? `0 0 30px ${colors.glow}, inset 0 0 25px rgba(255, 255, 255, 0.6)`
+            : `0 0 20px ${colors.glow}, inset 0 0 15px rgba(255, 255, 255, 0.4)`,
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
@@ -139,7 +164,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
         {/* Ripple effect */}
         {showRipple && (
           <span
-            className="absolute bg-white rounded-full opacity-30 animate-ripple"
+            className="absolute bg-white rounded-full opacity-40 animate-ripple"
             style={{
               top: ripplePosition.y,
               left: ripplePosition.x,
@@ -151,6 +176,15 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           />
         )}
 
+        {/* Button inner glow */}
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background: `radial-gradient(circle, ${colors.secondary}30, transparent 70%)`,
+            opacity: isPressed ? 0.8 : 0.5,
+          }}
+        />
+
         {/* Button content */}
         <div
           className="relative z-10 transform transition-transform duration-300"
@@ -161,11 +195,13 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           <Image
             src={getLeagueImage(league) || "/placeholder.svg"}
             alt={`League ${league}`}
-            width={200}
-            height={200}
+            width={180}
+            height={180}
             priority
+            className="drop-shadow-lg animate-pulse"
             style={{
-              filter: `drop-shadow(0 0 8px ${colors.glow})`,
+              filter: `drop-shadow(0 0 10px ${colors.glow})`,
+              animationDuration: "3s",
             }}
           />
         </div>

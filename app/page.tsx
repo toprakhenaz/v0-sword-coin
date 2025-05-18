@@ -14,14 +14,26 @@ import { supabase } from "@/lib/supabase"
 import { useUser } from "@/context/UserContext"
 
 export default function Home() {
-  const { userId, coins, energy, maxEnergy, earnPerTap, hourlyEarn, league, isLoading, updateCoins, updateEnergy } =
-    useUser()
+  const {
+    userId,
+    coins,
+    energy,
+    maxEnergy,
+    earnPerTap,
+    hourlyEarn,
+    league,
+    isLoading,
+    updateCoins,
+    updateEnergy,
+    refreshUserData,
+  } = useUser()
 
   // Game state
-  const [coinsToLevelUp, setCoinsToLevelUp] = useState(250000)
+  const [coinsToLevelUp, setCoinsToLevelUp] = useState(10000)
   const [lastHourlyCollectTime, setLastHourlyCollectTime] = useState<number | null>(null)
   const [showHourlyPopup, setShowHourlyPopup] = useState(false)
   const [hourlyCoinsToCollect, setHourlyCoinsToCollect] = useState(0)
+  const [tapMultiplier, setTapMultiplier] = useState(1) // For combo multiplier effects
 
   // Boost state
   const [dailyRockets, setDailyRockets] = useState(3)
@@ -33,35 +45,54 @@ export default function Home() {
     chargeSpeed: { level: 1, cost: 2000 },
   })
 
+  // Visual state
+  const [showTapEffect, setShowTapEffect] = useState(false)
+  const [comboCounter, setComboCounter] = useState(0)
+
   // UI state
   const [showLeagueOverlay, setShowLeagueOverlay] = useState(false)
   const [showBoostOverlay, setShowBoostOverlay] = useState(false)
+  const [showSuccessPopup, setShowSuccessPopup] = useState<{
+    show: boolean
+    title: string
+    message: string
+    image: string
+  }>({
+    show: false,
+    title: "",
+    message: "",
+    image: "",
+  })
 
-  // Load boost data
+  // Load boost data on init
   useEffect(() => {
     const loadBoosts = async () => {
       if (!userId) return
 
-      const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", userId).single()
+      try {
+        const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", userId).single()
 
-      if (userBoosts) {
-        setDailyRockets(userBoosts.daily_rockets)
-        setMaxDailyRockets(userBoosts.max_daily_rockets)
-        setEnergyFull(userBoosts.energy_full_used)
-        setBoosts({
-          multiTouch: {
-            level: userBoosts.multi_touch_level,
-            cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
-          },
-          energyLimit: {
-            level: userBoosts.energy_limit_level,
-            cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
-          },
-          chargeSpeed: {
-            level: userBoosts.charge_speed_level,
-            cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
-          },
-        })
+        if (userBoosts) {
+          setDailyRockets(userBoosts.daily_rockets)
+          setMaxDailyRockets(userBoosts.max_daily_rockets)
+          setEnergyFull(userBoosts.energy_full_used)
+          setBoosts({
+            multiTouch: {
+              level: userBoosts.multi_touch_level,
+              cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
+            },
+            energyLimit: {
+              level: userBoosts.energy_limit_level,
+              cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
+            },
+            chargeSpeed: {
+              level: userBoosts.charge_speed_level,
+              cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
+            },
+          })
+        }
+      } catch (error) {
+        console.error("Error loading boosts:", error)
       }
     }
 
@@ -70,16 +101,22 @@ export default function Home() {
     }
   }, [userId])
 
-  // Auto energy regeneration (subtle)
+  // Calculate coins needed for next league
   useEffect(() => {
-    const energyInterval = setInterval(() => {
-      if (energy < maxEnergy) {
-        updateEnergy(1)
-      }
-    }, 10000 / boosts.chargeSpeed.level) // Faster regeneration with higher charge speed level
+    const leagueThresholds = [
+      0, // League 1 (Wooden)
+      10000, // League 2 (Bronze)
+      100000, // League 3 (Iron)
+      1000000, // League 4 (Steel)
+      10000000, // League 5 (Adamantite)
+      100000000, // League 6 (Legendary)
+      1000000000, // League 7 (Dragon)
+    ]
 
-    return () => clearInterval(energyInterval)
-  }, [energy, maxEnergy, boosts.chargeSpeed.level, updateEnergy])
+    if (league < leagueThresholds.length) {
+      setCoinsToLevelUp(leagueThresholds[league] - coins)
+    }
+  }, [league, coins])
 
   // Hourly earnings system
   useEffect(() => {
@@ -123,19 +160,46 @@ export default function Home() {
     return () => clearInterval(hourlyCheckInterval)
   }, [lastHourlyCollectTime, hourlyEarn, userId])
 
+  // Combo system
+  useEffect(() => {
+    if (comboCounter > 0) {
+      const comboTimeout = setTimeout(() => {
+        setComboCounter(0)
+        setTapMultiplier(1)
+      }, 2000) // Reset combo after 2 seconds of inactivity
+
+      return () => clearTimeout(comboTimeout)
+    }
+  }, [comboCounter])
+
   // Game actions
   const handleTap = async () => {
     if (energy > 0) {
+      // Increase combo counter
+      const newCombo = comboCounter + 1
+      setComboCounter(newCombo)
+
+      // Calculate tap multiplier
+      let multiplier = 1
+      if (newCombo > 50) multiplier = 3
+      else if (newCombo > 25) multiplier = 2
+      else if (newCombo > 10) multiplier = 1.5
+
+      setTapMultiplier(multiplier)
+
+      // Calculate coins to earn
+      const coinsToEarn = Math.round(earnPerTap * multiplier)
+
+      // Show tap effect
+      setShowTapEffect(true)
+      setTimeout(() => setShowTapEffect(false), 200)
+
       // Update coins
-      await updateCoins(earnPerTap, "tap", "Earned from tapping")
+      await updateCoins(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`)
 
       // Update energy
       await updateEnergy(-1)
     }
-  }
-
-  const handleBoost = async () => {
-    await updateEnergy(20)
   }
 
   const handleCollectHourlyEarnings = async () => {
@@ -196,10 +260,18 @@ export default function Home() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId)
+
+      // Show success popup
+      setShowSuccessPopup({
+        show: true,
+        title: "Multi-Touch Upgraded!",
+        message: `Your Multi-Touch is now level ${newLevel}, giving you +${newLevel * 2} coins per tap.`,
+        image: "/boost-power.png",
+      })
     } else if (boostType === "energyLimit" && coins >= boosts.energyLimit.cost) {
       cost = boosts.energyLimit.cost
       newLevel = boosts.energyLimit.level + 1
-      const newMaxEnergy = maxEnergy + 500
+      const newMaxEnergy = 100 + (newLevel - 1) * 500
 
       // Update local state
       await updateCoins(-cost, "boost_upgrade", `Upgraded ${boostType} to level ${newLevel}`)
@@ -227,6 +299,14 @@ export default function Home() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId)
+
+      // Show success popup
+      setShowSuccessPopup({
+        show: true,
+        title: "Energy Limit Upgraded!",
+        message: `Your Energy Limit is now level ${newLevel}, increasing your max energy to ${newMaxEnergy}.`,
+        image: "/energy-power.png",
+      })
     } else if (boostType === "chargeSpeed" && coins >= boosts.chargeSpeed.cost) {
       cost = boosts.chargeSpeed.cost
       newLevel = boosts.chargeSpeed.level + 1
@@ -249,7 +329,18 @@ export default function Home() {
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", userId)
+
+      // Show success popup
+      setShowSuccessPopup({
+        show: true,
+        title: "Charge Speed Upgraded!",
+        message: `Your Charge Speed is now level ${newLevel}, increasing energy regeneration by ${newLevel * 20}%.`,
+        image: "/speed-power.png",
+      })
     }
+
+    // Refresh user data to get the updated values
+    await refreshUserData()
   }
 
   const handleUseRocket = async () => {
@@ -268,6 +359,14 @@ export default function Home() {
         .eq("user_id", userId)
 
       setShowBoostOverlay(false)
+
+      // Show success popup
+      setShowSuccessPopup({
+        show: true,
+        title: "Rocket Boost Used!",
+        message: "You gained +500 energy instantly.",
+        image: "/rocket-boost.png",
+      })
     }
   }
 
@@ -287,7 +386,19 @@ export default function Home() {
         .eq("user_id", userId)
 
       setShowBoostOverlay(false)
+
+      // Show success popup
+      setShowSuccessPopup({
+        show: true,
+        title: "Energy Fully Restored!",
+        message: "Your energy has been completely refilled.",
+        image: "/energy-full.png",
+      })
     }
+  }
+
+  const handleCloseSuccessPopup = () => {
+    setShowSuccessPopup({ ...showSuccessPopup, show: false })
   }
 
   if (isLoading) {
@@ -308,17 +419,32 @@ export default function Home() {
           <CoinDisplay coins={coins} league={league} onclick={() => setShowLeagueOverlay(true)} />
         </div>
 
+        {/* Combo counter */}
+        {comboCounter > 0 && (
+          <div className="my-2 text-center">
+            <span className="text-sm font-bold text-yellow-400">
+              {comboCounter}x Combo
+              {tapMultiplier > 1 && <span className="ml-2 text-green-400">({tapMultiplier}x Multiplier)</span>}
+            </span>
+          </div>
+        )}
+
         {/* Central button section - main focus */}
-        <div className="flex-grow flex items-center justify-center py-8">
+        <div className="flex-grow flex items-center justify-center py-8 relative">
+          {showTapEffect && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-52 h-52 bg-yellow-500 rounded-full animate-pulse opacity-10"></div>
+            </div>
+          )}
           <CentralButton onClick={handleTap} league={league} />
         </div>
 
-        {/* Energy bar section - ensure it's below the central button */}
+        {/* Energy bar section */}
         <div className="mb-20 mt-4">
           <EnergyBar
             energy={energy}
             maxEnergy={maxEnergy}
-            boost={handleBoost}
+            boost={handleUseRocket}
             onOpenBoostOverlay={() => setShowBoostOverlay(true)}
             league={league}
           />
@@ -345,10 +471,20 @@ export default function Home() {
       {/* Hourly earnings popup */}
       {showHourlyPopup && (
         <Popup
-          title="Saatlik Kazanç"
-          message={`${hourlyCoinsToCollect.toLocaleString()} coin kazandınız!`}
+          title="Hourly Earnings"
+          message={`You earned ${hourlyCoinsToCollect.toLocaleString()} coins while away!`}
           image="/coin.png"
           onClose={handleCollectHourlyEarnings}
+        />
+      )}
+
+      {/* Success popups */}
+      {showSuccessPopup.show && (
+        <Popup
+          title={showSuccessPopup.title}
+          message={showSuccessPopup.message}
+          image={showSuccessPopup.image}
+          onClose={handleCloseSuccessPopup}
         />
       )}
 
