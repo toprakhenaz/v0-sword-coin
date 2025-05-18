@@ -1,164 +1,287 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, CreditCard, Award, DollarSign, Activity } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { toast } from "@/components/ui/use-toast"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faUsers, faCoins, faImage, faTasks, faUserFriends, faTrophy, faBan } from "@fortawesome/free-solid-svg-icons"
 
-export default function AdminDashboard() {
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    activeUsers: 0,
-    totalCards: 0,
-    totalQuests: 0,
-    totalCoins: 0,
-  })
-
-  const [isLoading, setIsLoading] = useState(true)
+export default function AdminPage() {
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState("cards")
+  const [cards, setCards] = useState([])
+  const [users, setUsers] = useState([])
+  const [tasks, setTasks] = useState([])
+  const [listingPrice, setListingPrice] = useState("")
+  const supabase = createClient()
 
   useEffect(() => {
-    // Gerçek uygulamada bir API çağrısı yapılacak
-    // Burada demo veriler kullanıyoruz
-    const fetchStats = async () => {
+    const checkAdmin = async () => {
       try {
-        // API çağrısı simülasyonu
-        setTimeout(() => {
-          setStats({
-            totalUsers: 1245,
-            activeUsers: 876,
-            totalCards: 32,
-            totalQuests: 48,
-            totalCoins: 15000000,
-          })
-          setIsLoading(false)
-        }, 1000)
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          setLoading(false)
+          return
+        }
+
+        const { data, error } = await supabase.from("admin_users").select("*").eq("id", session.user.id).single()
+
+        if (error) throw error
+
+        setIsAdmin(!!data)
       } catch (error) {
-        console.error("İstatistik yükleme hatası:", error)
-        setIsLoading(false)
+        console.error("Error checking admin status:", error)
+      } finally {
+        setLoading(false)
       }
     }
 
-    fetchStats()
-  }, [])
+    checkAdmin()
+  }, [supabase])
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isAdmin) return
+
+    const fetchData = async () => {
+      try {
+        if (activeTab === "cards") {
+          const { data, error } = await supabase.from("cards").select("*").order("id")
+          if (error) throw error
+          setCards(data)
+        } else if (activeTab === "users") {
+          const { data, error } = await supabase.from("users").select("*").order("id")
+          if (error) throw error
+          setUsers(data)
+        } else if (activeTab === "tasks") {
+          const { data, error } = await supabase.from("tasks").select("*").order("id")
+          if (error) throw error
+          setTasks(data)
+        } else if (activeTab === "listing") {
+          // Fetch listing price from settings table
+          const { data, error } = await supabase.from("settings").select("*").eq("key", "listing_price").single()
+          if (error && error.code !== "PGRST116") throw error
+          setListingPrice(data?.value || "")
+        }
+      } catch (error) {
+        console.error(`Error fetching ${activeTab}:`, error)
+        toast({
+          title: "Error",
+          description: `Failed to fetch ${activeTab}`,
+          variant: "destructive",
+        })
+      }
+    }
+
+    fetchData()
+  }, [isAdmin, activeTab, supabase])
+
+  const updateListingPrice = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("settings")
+        .upsert({ key: "listing_price", value: listingPrice })
+        .select()
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: "Listing price updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating listing price:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update listing price",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="w-12 h-12 border-4 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
+        <div className="bg-gray-800 rounded-lg p-8 max-w-md text-center">
+          <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+          <p className="mb-4">You do not have permission to access the admin panel.</p>
+          <a href="/" className="inline-block px-4 py-2 bg-blue-600 rounded-lg">
+            Return to Home
+          </a>
+        </div>
       </div>
     )
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Genel Bakış</h1>
+    <div className="min-h-screen bg-gray-900 text-white">
+      <div className="container mx-auto p-4">
+        <h1 className="text-3xl font-bold mb-6">Admin Panel</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Toplam Kullanıcılar */}
-        <div className="bg-[#1a2235] rounded-xl p-6 border border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-300">Toplam Kullanıcılar</h3>
-            <div className="p-2 bg-blue-900/30 rounded-lg">
-              <Users className="w-6 h-6 text-blue-400" />
+        <div className="flex overflow-x-auto mb-6 pb-2">
+          <TabButton
+            active={activeTab === "cards"}
+            onClick={() => setActiveTab("cards")}
+            icon={faImage}
+            label="Cards"
+          />
+          <TabButton
+            active={activeTab === "users"}
+            onClick={() => setActiveTab("users")}
+            icon={faUsers}
+            label="Users"
+          />
+          <TabButton
+            active={activeTab === "tasks"}
+            onClick={() => setActiveTab("tasks")}
+            icon={faTasks}
+            label="Tasks"
+          />
+          <TabButton
+            active={activeTab === "referrals"}
+            onClick={() => setActiveTab("referrals")}
+            icon={faUserFriends}
+            label="Referrals"
+          />
+          <TabButton
+            active={activeTab === "leagues"}
+            onClick={() => setActiveTab("leagues")}
+            icon={faTrophy}
+            label="Leagues"
+          />
+          <TabButton active={activeTab === "bans"} onClick={() => setActiveTab("bans")} icon={faBan} label="Bans" />
+          <TabButton
+            active={activeTab === "listing"}
+            onClick={() => setActiveTab("listing")}
+            icon={faCoins}
+            label="Listing"
+          />
+        </div>
+
+        {activeTab === "cards" && (
+          <div>
+            <div className="flex justify-between mb-4">
+              <h2 className="text-xl font-bold">Manage Cards</h2>
+              <button className="px-4 py-2 bg-green-600 rounded-lg">Add New Card</button>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-700">
+                    <th className="p-3 text-left">ID</th>
+                    <th className="p-3 text-left">Name</th>
+                    <th className="p-3 text-left">Category</th>
+                    <th className="p-3 text-left">Base Income</th>
+                    <th className="p-3 text-left">Upgrade Cost</th>
+                    <th className="p-3 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cards.map((card) => (
+                    <tr key={card.id} className="border-t border-gray-700">
+                      <td className="p-3">{card.id}</td>
+                      <td className="p-3">{card.name}</td>
+                      <td className="p-3">{card.category}</td>
+                      <td className="p-3">{card.base_income}</td>
+                      <td className="p-3">{card.upgrade_cost}</td>
+                      <td className="p-3">
+                        <button className="px-3 py-1 bg-blue-600 rounded-lg mr-2">Edit</button>
+                        <button className="px-3 py-1 bg-red-600 rounded-lg">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-          <div className="flex items-end">
-            <span className="text-3xl font-bold">{stats.totalUsers.toLocaleString()}</span>
-            <span className="ml-2 text-sm text-green-400">+12% ↑</span>
-          </div>
-          <p className="text-sm text-gray-400 mt-2">Aktif: {stats.activeUsers.toLocaleString()}</p>
-        </div>
+        )}
 
-        {/* Toplam Kartlar */}
-        <div className="bg-[#1a2235] rounded-xl p-6 border border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-300">Toplam Kartlar</h3>
-            <div className="p-2 bg-purple-900/30 rounded-lg">
-              <CreditCard className="w-6 h-6 text-purple-400" />
+        {activeTab === "users" && (
+          <div>
+            <h2 className="text-xl font-bold mb-4">Manage Users</h2>
+
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-700">
+                    <th className="p-3 text-left">ID</th>
+                    <th className="p-3 text-left">Username</th>
+                    <th className="p-3 text-left">Coins</th>
+                    <th className="p-3 text-left">Crystals</th>
+                    <th className="p-3 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id} className="border-t border-gray-700">
+                      <td className="p-3">{user.id}</td>
+                      <td className="p-3">{user.username}</td>
+                      <td className="p-3">{user.coins}</td>
+                      <td className="p-3">{user.crystals}</td>
+                      <td className="p-3">
+                        <button className="px-3 py-1 bg-blue-600 rounded-lg mr-2">Edit</button>
+                        <button className="px-3 py-1 bg-red-600 rounded-lg">Ban</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-          <div className="flex items-end">
-            <span className="text-3xl font-bold">{stats.totalCards.toLocaleString()}</span>
-          </div>
-          <p className="text-sm text-gray-400 mt-2">Aktif: {Math.floor(stats.totalCards * 0.8)}</p>
-        </div>
+        )}
 
-        {/* Toplam Görevler */}
-        <div className="bg-[#1a2235] rounded-xl p-6 border border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-300">Toplam Görevler</h3>
-            <div className="p-2 bg-amber-900/30 rounded-lg">
-              <Award className="w-6 h-6 text-amber-400" />
-            </div>
-          </div>
-          <div className="flex items-end">
-            <span className="text-3xl font-bold">{stats.totalQuests.toLocaleString()}</span>
-          </div>
-          <p className="text-sm text-gray-400 mt-2">Aktif: {Math.floor(stats.totalQuests * 0.75)}</p>
-        </div>
+        {activeTab === "listing" && (
+          <div>
+            <h2 className="text-xl font-bold mb-4">Listing Settings</h2>
 
-        {/* Toplam Altın */}
-        <div className="bg-[#1a2235] rounded-xl p-6 border border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-300">Toplam Altın</h3>
-            <div className="p-2 bg-green-900/30 rounded-lg">
-              <DollarSign className="w-6 h-6 text-green-400" />
-            </div>
-          </div>
-          <div className="flex items-end">
-            <span className="text-3xl font-bold">{stats.totalCoins.toLocaleString()}</span>
-          </div>
-          <p className="text-sm text-gray-400 mt-2">Günlük: {Math.floor(stats.totalCoins / 30).toLocaleString()}</p>
-        </div>
-      </div>
-
-      {/* Aktivite Grafiği */}
-      <div className="bg-[#1a2235] rounded-xl p-6 border border-gray-800 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-medium text-gray-300">Kullanıcı Aktivitesi</h3>
-          <div className="flex items-center">
-            <Activity className="w-5 h-5 text-blue-400 mr-2" />
-            <span className="text-sm text-blue-400">Son 7 gün</span>
-          </div>
-        </div>
-
-        <div className="h-64 flex items-end justify-between">
-          {/* Basit bir grafik simülasyonu */}
-          {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((day, index) => {
-            const height = Math.floor(Math.random() * 60) + 20
-            return (
-              <div key={index} className="flex flex-col items-center flex-1">
-                <div
-                  className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md mx-1"
-                  style={{ height: `${height}%` }}
-                ></div>
-                <span className="text-xs text-gray-400 mt-2">{day}</span>
+            <div className="bg-gray-800 rounded-lg p-6">
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Listing Price (USD)</label>
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={listingPrice}
+                    onChange={(e) => setListingPrice(e.target.value)}
+                    className="bg-gray-700 rounded-lg p-2 w-full"
+                    placeholder="Enter listing price"
+                  />
+                  <button className="ml-2 px-4 py-2 bg-blue-600 rounded-lg" onClick={updateListingPrice}>
+                    Save
+                  </button>
+                </div>
               </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Son Etkinlikler */}
-      <div className="bg-[#1a2235] rounded-xl p-6 border border-gray-800">
-        <h3 className="text-lg font-medium text-gray-300 mb-4">Son Etkinlikler</h3>
-
-        <div className="space-y-4">
-          {[
-            { action: "Yeni kullanıcı kaydoldu", user: "KılıçUstası", time: "5 dakika önce" },
-            { action: "Yeni kart eklendi", user: "Admin", time: "1 saat önce" },
-            { action: "Görev tamamlandı", user: "EjderhaKatili", time: "3 saat önce" },
-            { action: "Silah yükseltildi", user: "AltınAvcısı", time: "5 saat önce" },
-            { action: "Sistem güncellemesi yapıldı", user: "Admin", time: "1 gün önce" },
-          ].map((activity, index) => (
-            <div key={index} className="flex items-center justify-between p-3 bg-[#1e2738] rounded-lg">
-              <div>
-                <p className="font-medium">{activity.action}</p>
-                <p className="text-sm text-gray-400">Kullanıcı: {activity.user}</p>
-              </div>
-              <span className="text-xs text-gray-500">{activity.time}</span>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* Other tabs would be implemented here */}
       </div>
     </div>
+  )
+}
+
+function TabButton({ active, onClick, icon, label }) {
+  return (
+    <button
+      className={`px-4 py-2 rounded-lg mr-2 flex items-center ${
+        active ? "bg-blue-600" : "bg-gray-700 hover:bg-gray-600"
+      }`}
+      onClick={onClick}
+    >
+      <FontAwesomeIcon icon={icon} className="mr-2" />
+      {label}
+    </button>
   )
 }
