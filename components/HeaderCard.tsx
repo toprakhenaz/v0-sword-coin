@@ -1,29 +1,28 @@
-"use client"
-
-import { Card, CardContent } from "./ui/card"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faCoins } from "@fortawesome/free-solid-svg-icons"
-import Image from "next/image"
-import { useUser } from "@/app/context/UserContext"
-import { formatNumber } from "@/lib/utils"
+import { icons } from "@/icons"
+import { useLeagueData } from "@/data/GeneralData"
 
-export default function HeaderCard() {
-  const { user } = useUser()
+export default function HeaderCard({ coins, hourlyEarn = 0 }: { coins?: number; hourlyEarn?: number }) {
+  const { getLeagueColors } = useLeagueData()
+  const colors = getLeagueColors(6) // Default to league 6 colors
 
   return (
-    <Card className="bg-gray-800 mb-4">
-      <CardContent className="p-4">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center">
-            <FontAwesomeIcon icon={faCoins} className="text-yellow-400 mr-2 text-2xl" />
-            <span className="text-2xl font-bold">{formatNumber(user?.coins || 0)}</span>
-          </div>
-          <div className="flex items-center">
-            <Image src="/crystal.png" alt="Crystal" width={24} height={24} />
-            <span className="font-semibold text-2xl ml-1">{user?.crystals || 0}</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="bg-[#0d1220] py-3 px-4 mb-4 flex justify-between items-center">
+      <div className="flex items-center bg-gradient-to-r from-amber-700 to-amber-800 rounded-full py-1 px-3 shadow-md">
+        <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
+        <span className="text-white font-bold">{coins?.toLocaleString()}</span>
+      </div>
+
+      <div
+        className="flex items-center rounded-full py-1 px-4 border-2"
+        style={{
+          borderColor: colors.primary,
+          background: "transparent",
+        }}
+      >
+        <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
+        <span className="font-medium text-white">{hourlyEarn}/saat</span>
+      </div>
+    </div>
   )
 }

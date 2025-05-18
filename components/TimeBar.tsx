@@ -5,10 +5,13 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import type { TimerBarProps } from "@/types"
 import { getCardImage } from "@/data/cardData"
+import { useLeagueData } from "@/data/GeneralData"
 
 export default function TimerBar({ dailyCombo, foundCards }: TimerBarProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0)
   const [isFlipped, setIsFlipped] = useState<boolean[]>([false, false, false])
+  const { getLeagueColors } = useLeagueData()
+  const colors = getLeagueColors(6) // Use league 6 colors for the timer bar
 
   useEffect(() => {
     const calculateTimeLeft = () => {
@@ -43,14 +46,29 @@ export default function TimerBar({ dailyCombo, foundCards }: TimerBarProps) {
 
   return (
     <>
-      <div className="bg-gradient-to-r from-gray-800 to-gray-700 rounded-lg p-4 flex items-center justify-between shadow-lg">
+      <div
+        className="rounded-lg p-4 flex items-center justify-between shadow-lg mb-4"
+        style={{
+          background: `linear-gradient(to right, ${colors.primary}40, ${colors.secondary}60)`,
+          border: `1px solid ${colors.secondary}60`,
+          boxShadow: `0 4px 12px ${colors.glow}30`,
+        }}
+      >
         <div className="flex items-center">
-          <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center mr-3">
-            <FontAwesomeIcon icon={icons.clock} className="text-gray-900 text-lg" />
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center mr-3"
+            style={{
+              background: `linear-gradient(to bottom right, ${colors.primary}, ${colors.secondary})`,
+              boxShadow: `0 0 10px ${colors.glow}`,
+            }}
+          >
+            <FontAwesomeIcon icon={icons.clock} className="text-lg" style={{ color: colors.text }} />
           </div>
           <div>
             <div className="text-sm sm:text-base font-semibold text-white">Daily Combo</div>
-            <div className="text-xs sm:text-sm text-yellow-300 font-mono">{formatTime(timeLeft)}</div>
+            <div className="text-xs sm:text-sm font-mono" style={{ color: colors.text }}>
+              {formatTime(timeLeft)}
+            </div>
           </div>
         </div>
         <div className="flex items-center">
@@ -77,22 +95,37 @@ export default function TimerBar({ dailyCombo, foundCards }: TimerBarProps) {
               }}
             >
               <div
-                className="absolute w-full bg-gradient-to-b from-gray-700 to-gray-800 rounded-lg p-2 border-2 border-gray-600 shadow-lg flex items-center justify-center aspect-square"
-                style={{ backfaceVisibility: "hidden" }}
+                className="absolute w-full rounded-lg p-2 border-2 shadow-lg flex items-center justify-center aspect-square"
+                style={{
+                  backfaceVisibility: "hidden",
+                  background: `linear-gradient(to bottom, ${colors.primary}60, ${colors.secondary}80)`,
+                  borderColor: colors.secondary,
+                  boxShadow: `0 4px 12px ${colors.glow}40`,
+                }}
               >
                 {foundCards.includes(cardId) ? (
                   <div className="opacity-0 animate-fadeIn">
-                    <FontAwesomeIcon icon={icons.question} className="text-5xl text-yellow-400" />
+                    <FontAwesomeIcon icon={icons.question} className="text-5xl" style={{ color: colors.text }} />
                   </div>
                 ) : (
-                  <FontAwesomeIcon icon={icons.question} className="text-5xl text-yellow-400 animate-pulse" />
+                  <FontAwesomeIcon
+                    icon={icons.question}
+                    className="text-5xl animate-pulse"
+                    style={{ color: colors.text }}
+                  />
                 )}
               </div>
 
               {foundCards.includes(cardId) && (
                 <div
-                  className="absolute w-full bg-gradient-to-b from-yellow-500 to-yellow-700 rounded-lg p-2 border-2 border-yellow-400 shadow-lg aspect-square overflow-hidden"
-                  style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+                  className="absolute w-full rounded-lg p-2 border-2 shadow-lg aspect-square overflow-hidden"
+                  style={{
+                    backfaceVisibility: "hidden",
+                    transform: "rotateY(180deg)",
+                    background: `linear-gradient(to bottom, ${colors.primary}, ${colors.secondary})`,
+                    borderColor: colors.secondary,
+                    boxShadow: `0 4px 12px ${colors.glow}`,
+                  }}
                 >
                   <img
                     src={getCardImage(cardId) || "/placeholder.svg"}
@@ -104,8 +137,14 @@ export default function TimerBar({ dailyCombo, foundCards }: TimerBarProps) {
             </div>
 
             {foundCards.includes(cardId) && (
-              <div className="absolute top-0 right-0 bg-green-500 text-white w-6 h-6 rounded-full flex items-center justify-center transform translate-x-1/4 -translate-y-1/4 z-10 shadow-lg">
-                <FontAwesomeIcon icon={icons.check} className="text-xs" />
+              <div
+                className="absolute top-0 right-0 w-6 h-6 rounded-full flex items-center justify-center transform translate-x-1/4 -translate-y-1/4 z-10 shadow-lg"
+                style={{
+                  background: `linear-gradient(to bottom right, #22c55e, #16a34a)`,
+                  boxShadow: `0 0 10px rgba(34, 197, 94, 0.5)`,
+                }}
+              >
+                <FontAwesomeIcon icon={icons.check} className="text-xs text-white" />
               </div>
             )}
           </div>

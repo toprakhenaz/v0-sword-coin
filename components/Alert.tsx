@@ -1,4 +1,7 @@
+"use client"
+
 import type React from "react"
+
 import type { AlertProps } from "@/types"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"

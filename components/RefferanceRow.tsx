@@ -9,7 +9,9 @@ export default function RefferanceRow({ referance, collectCoins, isAnimating = f
     <div
       className={`bg-gradient-to-r ${
         referance.isClaimed ? "from-gray-800 to-gray-700" : "from-zinc-800 to-zinc-700"
-      } rounded-lg shadow-lg overflow-hidden transition-all duration-300 ${isAnimating ? "scale-105 border-2 border-yellow-400" : ""}`}
+      } rounded-lg shadow-lg overflow-hidden transition-all duration-300 ${
+        isAnimating ? "scale-105 border-2 border-yellow-400" : ""
+      }`}
     >
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center">

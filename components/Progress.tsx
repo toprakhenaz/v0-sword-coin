@@ -1,3 +1,5 @@
+"use client"
+
 import type { ProgressProps } from "@/types"
 
 export function Progress({ value, className }: ProgressProps) {

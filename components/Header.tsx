@@ -1,38 +1,39 @@
+"use client"
+
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import type { HeaderProps } from "@/types"
-import Image from "next/image"
+import { useLeagueData } from "@/data/GeneralData"
 
-export default function Header({ earnPerTap, coinsToLevelUp, crystals }: HeaderProps) {
+export default function Header({ earnPerTap, coinsToLevelUp, hourlyEarn }: HeaderProps) {
+  const { getLeagueColors } = useLeagueData()
+  const colors = getLeagueColors(6) // Default colors for league 6
+
   return (
-    <div
-      className="flex flex-row justify-between py-4 px-8 text-xl font-bold shadow-lg rounded-full"
-      style={{ background: "linear-gradient(to bottom, #281d8a, #302b63, #24243e)" }}
-    >
-      <div className="flex flex-col justify-center">
-        <p className="text-xs text-purple-500">Crystals</p>
-        <div className="flex flex-row">
-          <Image
-            src="/crystal.png"
-            alt="Gem Icon"
-            width={24} // Adjust the width
-            height={24} // Adjust the height
-          />
-          <span className="text-xl font-bold text-white ml-1">{crystals}</span>
+    <div className="bg-[#0d1220] rounded-xl p-4 shadow-lg mb-4">
+      <div className="flex justify-between items-center">
+        <div className="flex flex-col items-center">
+          <p className="text-xs text-gray-300 mb-1">Saatlik Kazanç</p>
+          <div className="flex items-center">
+            <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-sm" />
+            <span className="text-white font-bold">{hourlyEarn.toLocaleString()}</span>
+          </div>
         </div>
-      </div>
-      <div className="flex flex-col text-center">
-        <p className="text-xs text-green-400">Coins to level up</p>
-        <div>
-          <FontAwesomeIcon icon={icons.angleDoubleUp} className="mr-2" />
-          <span>{coinsToLevelUp}</span>
+
+        <div className="flex flex-col items-center">
+          <p className="text-xs text-gray-300 mb-1">Seviye İçin Gereken</p>
+          <div className="flex items-center">
+            <FontAwesomeIcon icon={icons.angleDoubleUp} className="text-white mr-1 text-sm" />
+            <span className="text-white font-bold">{coinsToLevelUp.toLocaleString()}</span>
+          </div>
         </div>
-      </div>
-      <div className="flex flex-col text-center">
-        <p className="text-xs text-yellow-400">Earn per Tap</p>
-        <div>
-          <FontAwesomeIcon icon={icons.coins} className="mr-2" />
-          <span>+{earnPerTap}</span>
+
+        <div className="flex flex-col items-center">
+          <p className="text-xs text-gray-300 mb-1">Tıklama Başına</p>
+          <div className="flex items-center">
+            <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-sm" />
+            <span className="text-white font-bold">+{earnPerTap}</span>
+          </div>
         </div>
       </div>
     </div>

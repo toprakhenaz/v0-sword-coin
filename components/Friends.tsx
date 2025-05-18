@@ -1,3 +1,5 @@
+"use client"
+
 import type { FriendsProps } from "@/types"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"

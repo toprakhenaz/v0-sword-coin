@@ -1,172 +1,115 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import HeaderCard from "@/components/HeaderCard"
 import Navbar from "@/components/Navbar"
 import Friends from "@/components/Friends"
 import RefferanceRow from "@/components/RefferanceRow"
-import { useUser } from "@/app/context/UserContext"
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faCopy, faUserGroup } from "@fortawesome/free-solid-svg-icons"
-import { toast } from "@/components/ui/use-toast"
-import FriendsSkeletonLoading from "@/components/skeletons/SkeletonFriends"
-import Popup from "@/components/Popup"
-import { createClient } from "@/lib/supabase/client"
+import { Alert, AlertTitle, AlertDescription } from "@/components/Alert"
+import { Button } from "@/components/Button"
+import Modal from "@/components/Modal"
 
 export default function FriendsPage() {
-  const { user, loading, addCoins } = useUser()
-  const [referrals, setReferrals] = useState([])
-  const [loadingReferrals, setLoadingReferrals] = useState(true)
-  const [popup, setPopup] = useState(false)
-  const [popupMessage, setPopupMessage] = useState("")
-  const [animatingRefId, setAnimatingRefId] = useState(null)
-  const INVITE_URL = "https://t.me/HamsterCombatBot/HamsterCombat"
-  const supabase = createClient()
+  const [coins, setCoins] = useState(24161)
+  const [league, setLeague] = useState(6)
+  const [showModal, setShowModal] = useState(false)
+  const [showAlert, setShowAlert] = useState(false)
+  const [collectingId, setCollectingId] = useState<string | null>(null)
+  const [referrals, setReferrals] = useState([
+    {
+      referencedId: "1",
+      referancedName: "Ahmet",
+      referenceAmount: 2500,
+      isClaimed: false,
+    },
+    {
+      referencedId: "2",
+      referancedName: "Mehmet",
+      referenceAmount: 2500,
+      isClaimed: true,
+    },
+    {
+      referencedId: "3",
+      referancedName: "Ayşe",
+      referenceAmount: 2500,
+      isClaimed: false,
+    },
+  ])
 
-  useEffect(() => {
-    const fetchReferrals = async () => {
-      if (!user) return
+  const handleCollectCoins = (id: string) => {
+    setCollectingId(id)
 
-      try {
-        const { data, error } = await supabase
-          .from("referrals")
-          .select("*, referred:users!referred_id(username)")
-          .eq("referrer_id", user.id)
-          .order("created_at", { ascending: false })
+    // Simulate API call
+    setTimeout(() => {
+      setReferrals(referrals.map((ref) => (ref.referencedId === id ? { ...ref, isClaimed: true } : ref)))
 
-        if (error) throw error
-
-        // Transform the data to match the expected format
-        const transformedReferrals = data.map((ref) => ({
-          id: ref.id,
-          referencedId: ref.referred_id,
-          referancedName: ref.referred.username,
-          referenceAmount: ref.reward_amount,
-          isClaimed: ref.is_claimed,
-        }))
-
-        setReferrals(transformedReferrals)
-      } catch (error) {
-        console.error("Error fetching referrals:", error)
-      } finally {
-        setLoadingReferrals(false)
+      const referral = referrals.find((ref) => ref.referencedId === id)
+      if (referral) {
+        setCoins(coins + referral.referenceAmount)
       }
-    }
 
-    if (user) {
-      fetchReferrals()
-    }
-  }, [user, supabase])
+      setCollectingId(null)
+      setShowAlert(true)
 
-  const collectCoins = async (refId) => {
-    if (!user) return
-
-    setAnimatingRefId(refId)
-
-    try {
-      // Find the referral
-      const referral = referrals.find((ref) => ref.referencedId === refId)
-      if (!referral || referral.isClaimed) return
-
-      // Update the referral in the database
-      const { error: updateError } = await supabase.from("referrals").update({ is_claimed: true }).eq("id", referral.id)
-
-      if (updateError) throw updateError
-
-      // Add coins to the user
-      await addCoins(referral.referenceAmount)
-
-      // Show popup
-      setPopupMessage(`${referral.referenceAmount} coin kazandınız tebrikler!!`)
-      setPopup(true)
-
-      // Update local state after animation
+      // Hide alert after 3 seconds
       setTimeout(() => {
-        setAnimatingRefId(null)
-        setReferrals((prevReferrals) =>
-          prevReferrals.map((ref) => {
-            if (ref.referencedId === refId) {
-              return { ...ref, isClaimed: true }
-            }
-            return ref
-          }),
-        )
-      }, 1000)
-    } catch (error) {
-      console.error("Error collecting coins:", error)
-      setAnimatingRefId(null)
-    }
+        setShowAlert(false)
+      }, 3000)
+    }, 1500)
   }
 
-  const handleCopyLink = () => {
-    const inviteLink = `${INVITE_URL}?startapp=${user?.id}`
-    navigator.clipboard.writeText(inviteLink)
-    toast({
-      title: "Success",
-      description: "Invitation link copied to clipboard!",
-    })
-  }
-
-  if (loading || !user || loadingReferrals) {
-    return <FriendsSkeletonLoading />
+  const copyReferralLink = () => {
+    navigator.clipboard.writeText("https://example.com/ref/user123")
+    setShowModal(true)
   }
 
   return (
-    <div className="bg-gradient-to-b from-gray-900 to-gray-800 text-white font-sans min-h-screen flex flex-col p-4">
-      <HeaderCard />
-      <Friends length={referrals.length || 0} />
+    <main className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-4 pb-24">
+      <HeaderCard coins={coins} league={league} />
 
-      <div className="flex space-x-3 mb-4 mt-2">
-        <button className="flex-grow bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-3 px-4 rounded-xl text-sm font-medium transition-all duration-300 shadow-lg hover:shadow-indigo-500/20">
-          Invite Friends
-        </button>
+      <Friends length={referrals.length} />
 
-        <button
-          className="w-14 h-14 bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 shadow-lg hover:shadow-blue-500/20"
-          onClick={handleCopyLink}
-        >
-          <FontAwesomeIcon icon={faCopy} className="w-5 h-5" />
-        </button>
+      {showAlert && (
+        <div className="mb-4">
+          <Alert isGreen>
+            <AlertTitle>Başarılı!</AlertTitle>
+            <AlertDescription>Referans ödülünüz başarıyla toplandı.</AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      <div className="mb-6">
+        <Button className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white" onClick={copyReferralLink}>
+          Referans Linkini Kopyala
+        </Button>
       </div>
 
-      {referrals.length > 0 ? (
-        <div className="space-y-4 overflow-y-auto pb-16" style={{ minHeight: "25vh", maxHeight: "60vh" }}>
-          {referrals.map((referral, index) => (
-            <RefferanceRow
-              key={index}
-              referance={referral}
-              collectCoins={collectCoins}
-              isAnimating={animatingRefId === referral.referencedId}
-            />
-          ))}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold">Referanslarım</h2>
+        {referrals.map((referance) => (
+          <RefferanceRow
+            key={referance.referencedId}
+            referance={referance}
+            collectCoins={handleCollectCoins}
+            isAnimating={collectingId === referance.referencedId}
+          />
+        ))}
+      </div>
+
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)}>
+        <div className="text-center">
+          <h2 className="text-xl font-bold mb-4">Referans Linki Kopyalandı</h2>
+          <p className="mb-4">Referans linkini arkadaşlarınla paylaşarak ödül kazanabilirsin.</p>
+          <Button
+            className="bg-gradient-to-r from-green-500 to-green-700 text-white"
+            onClick={() => setShowModal(false)}
+          >
+            Tamam
+          </Button>
         </div>
-      ) : (
-        <div className="flex-grow flex flex-col items-center justify-center text-center p-8 rounded-lg bg-gray-800/50 border border-gray-700">
-          <div className="w-20 h-20 rounded-full bg-indigo-600/20 flex items-center justify-center mb-4">
-            <FontAwesomeIcon icon={faUserGroup} className="text-3xl text-indigo-400" />
-          </div>
-          <h3 className="text-xl font-bold mb-2">No friends yet</h3>
-          <p className="text-gray-400 mb-4">Invite your friends to earn bonus coins!</p>
-          <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center" onClick={handleCopyLink}>
-            <FontAwesomeIcon icon={faCopy} className="mr-2" />
-            Copy Invitation Link
-          </button>
-        </div>
-      )}
+      </Modal>
 
       <Navbar />
-
-      {popup && (
-        <Popup
-          title="Referral reward collected!"
-          message={popupMessage}
-          image="/coins.png"
-          onClose={() => {
-            setPopup(false)
-            setPopupMessage("")
-          }}
-        />
-      )}
-    </div>
+    </main>
   )
 }

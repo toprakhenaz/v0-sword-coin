@@ -9,18 +9,34 @@ import { leaderboardData } from "@/data/leaderboardData"
 import Image from "next/image"
 
 export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
-  const [currentLeague, setCurrentLeague] = useState<number>(3)
-  const totalLeagues = Object.keys(leaderboardData).length
+  const [currentLeague, setCurrentLeague] = useState<number>(4)
+  const [animateLeague, setAnimateLeague] = useState(false)
+  const [isLeaderboardCollapsed, setIsLeaderboardCollapsed] = useState(false)
+  const totalLeagues = 7
   const sliderRef = useRef<HTMLDivElement>(null)
-  const { getLeagueImage, getLeagueColor, getLeagueCoin } = useLeagueData()
+  const { getLeagueImage, getLeagueColors, getLeagueCoin, getLeagueName } = useLeagueData()
   const totalNeeded = getLeagueCoin(currentLeague)
+  const colors = getLeagueColors(currentLeague)
+
+  // Animate on mount
+  useEffect(() => {
+    setAnimateLeague(true)
+  }, [])
 
   const handleNextLeague = () => {
-    setCurrentLeague((prevLeague) => (prevLeague < totalLeagues ? prevLeague + 1 : 1))
+    setAnimateLeague(false)
+    setTimeout(() => {
+      setCurrentLeague((prevLeague) => (prevLeague < totalLeagues ? prevLeague + 1 : 1))
+      setAnimateLeague(true)
+    }, 300)
   }
 
   const handlePrevLeague = () => {
-    setCurrentLeague((prevLeague) => (prevLeague > 1 ? prevLeague - 1 : totalLeagues))
+    setAnimateLeague(false)
+    setTimeout(() => {
+      setCurrentLeague((prevLeague) => (prevLeague > 1 ? prevLeague - 1 : totalLeagues))
+      setAnimateLeague(true)
+    }, 300)
   }
 
   const handleSliderScroll = (direction: "up" | "down") => {
@@ -31,133 +47,256 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
     }
   }
 
-  useEffect(() => {
-    const slider = sliderRef.current
-    if (slider) {
-      const handleScroll = () => {
-        // Add scroll position logic here if needed
-      }
-      slider.addEventListener("scroll", handleScroll)
-      return () => slider.removeEventListener("scroll", handleScroll)
-    }
-  }, [])
+  const toggleLeaderboard = () => {
+    setIsLeaderboardCollapsed(!isLeaderboardCollapsed)
+  }
+
+  // Calculate progress percentage
+  const progressPercentage = Math.min(100, (coins / totalNeeded) * 100)
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-b from-[#0f0c29] via-[#302b63] to-[#24243e] bg-opacity-90 z-50 text-white p-6 flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center transition-all duration-500"
+      style={{
+        background: `linear-gradient(to bottom, rgba(13, 17, 28, 0.98), rgba(13, 17, 28, 0.95))`,
+        backdropFilter: "blur(10px)",
+      }}
+    >
+      {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 text-2xl text-yellow-400 hover:text-red-400 transition-colors"
+        className="absolute top-4 right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-gray-700 bg-opacity-50 text-gray-300 transition-all duration-300 hover:bg-opacity-70"
       >
-        <FontAwesomeIcon icon={icons.times} />
+        <FontAwesomeIcon icon={icons.times} size="lg" />
       </button>
 
-      {/* League Image and Navigation */}
-      <div className="flex-grow flex flex-col items-center justify-center space-y-4">
-        <div className="relative w-full max-w-xs">
-          <div className="relative">
-            <div
-              className="absolute inset-0 rounded-full blur-2xl"
-              style={{ backgroundColor: getLeagueColor(currentLeague) }}
-            ></div>
-            <Image
-              src={getLeagueImage(currentLeague) || "/placeholder.svg"}
-              alt={`League ${currentLeague}`}
-              width={200}
-              height={200}
-              className="mx-auto relative z-10"
-            />
-          </div>
-          <div className="text-center mt-4">
-            <span className="text-2xl font-bold text-white">League {currentLeague}</span>
-          </div>
-          <button
-            onClick={handlePrevLeague}
-            className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-4 bg-yellow-400 text-gray-900 rounded-full p-2 hover:bg-yellow-300 transition-colors"
-          >
-            <FontAwesomeIcon icon={icons.chevronLeft} size="lg" />
-          </button>
-          <button
-            onClick={handleNextLeague}
-            className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-4 bg-yellow-400 text-gray-900 rounded-full p-2 hover:bg-yellow-300 transition-colors"
-          >
-            <FontAwesomeIcon icon={icons.chevronRight} size="lg" />
-          </button>
+      <div className="relative w-full max-w-md mx-auto h-full max-h-[800px] flex flex-col px-6 py-8">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <h2 className="text-3xl font-bold text-white mb-1">League Rankings</h2>
+          <div className="text-gray-400">Climb the ranks to earn more rewards</div>
         </div>
 
-        {/* Coin Progress */}
-        <div className="text-yellow-400 text-2xl flex items-center">
-          <FontAwesomeIcon icon={icons.coins} className="mr-2" />
-          {coins !== undefined ? coins.toLocaleString() : "0"} /{" "}
-          {totalNeeded !== undefined ? totalNeeded.toLocaleString() : "0"}
-        </div>
+        {/* League Image and Navigation */}
+        <div className="flex-1 flex flex-col items-center justify-center mb-8">
+          <div className="flex items-center justify-center w-full mb-6">
+            <button
+              onClick={handlePrevLeague}
+              className="h-12 w-12 rounded-full bg-gray-800 bg-opacity-70 text-white transition-all duration-300 hover:bg-opacity-100 flex items-center justify-center mr-6"
+              style={{
+                border: `1px solid ${colors.secondary}40`,
+              }}
+            >
+              <FontAwesomeIcon icon={icons.chevronLeft} />
+            </button>
 
-        {/* Progress Bar */}
-        <div className="w-full max-w-xs bg-gray-700 rounded-full h-6 overflow-hidden mt-2 border-2 border-yellow-400">
+            <div className="relative">
+              <div
+                className={`relative transition-all duration-500 ${animateLeague ? "scale-100 opacity-100" : "scale-90 opacity-0"}`}
+              >
+                <div
+                  className="relative z-10 flex h-40 w-40 items-center justify-center rounded-full"
+                  style={{
+                    background: `radial-gradient(circle, ${colors.secondary}40, ${colors.primary}80)`,
+                    boxShadow: `0 0 30px ${colors.glow}`,
+                    border: `2px solid ${colors.secondary}80`,
+                  }}
+                >
+                  <Image
+                    src={getLeagueImage(currentLeague) || "/placeholder.svg"}
+                    alt={`League ${currentLeague}`}
+                    width={120}
+                    height={120}
+                    className="object-contain transition-all duration-500"
+                    style={{ filter: `drop-shadow(0 0 8px ${colors.glow})` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleNextLeague}
+              className="h-12 w-12 rounded-full bg-gray-800 bg-opacity-70 text-white transition-all duration-300 hover:bg-opacity-100 flex items-center justify-center ml-6"
+              style={{
+                border: `1px solid ${colors.secondary}40`,
+              }}
+            >
+              <FontAwesomeIcon icon={icons.chevronRight} />
+            </button>
+          </div>
+
           <div
-            className="bg-yellow-400 h-full transition-all duration-500 flex items-center justify-end pr-2"
-            style={{ width: `${(coins / totalNeeded) * 100}%` }}
+            className={`text-center transition-all duration-500 ${animateLeague ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"}`}
           >
-            <span className="text-gray-900 font-bold text-sm">{Math.round((coins / totalNeeded) * 100)}%</span>
+            <h3 className="text-2xl font-bold" style={{ color: colors.text }}>
+              {getLeagueName(currentLeague)} League
+            </h3>
+            <div className="text-gray-400">
+              League {currentLeague} of {totalLeagues}
+            </div>
           </div>
         </div>
 
-        {/* Top Players Section - Move up below the progress bar */}
-        <div className="w-full max-w-xs bg-black bg-opacity-50 p-4 rounded-2xl shadow-2xl mt-4">
-          <h3 className="text-lg font-bold mb-4 text-center">Top Players</h3>
-          <div className="relative h-48">
+        {/* Progress Section */}
+        <div className="mb-6">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-gray-400">Your Progress</div>
+            <div className="flex items-center text-lg font-bold">
+              <FontAwesomeIcon icon={icons.coins} className="mr-2 text-yellow-400" />
+              <span className="text-yellow-300">{formatNumber(coins)}</span>
+              <span className="mx-1 text-gray-500">/</span>
+              <span className="text-white">{formatNumber(totalNeeded)}</span>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="relative h-8 w-full overflow-hidden rounded-full bg-gray-800 mb-2 border border-gray-700">
+            <div
+              className="absolute top-0 left-0 h-full transition-all duration-1000 ease-out flex items-center justify-center"
+              style={{
+                width: `${progressPercentage}%`,
+                background: `linear-gradient(90deg, ${colors.secondary}, ${colors.primary})`,
+                boxShadow: `0 0 10px ${colors.glow}`,
+              }}
+            >
+              {progressPercentage > 5 && (
+                <span className="text-xs font-bold text-white px-2">{Math.round(progressPercentage)}%</span>
+              )}
+            </div>
+
+            {progressPercentage <= 5 && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xs font-bold text-white">{Math.round(progressPercentage)}%</span>
+              </div>
+            )}
+          </div>
+
+          <div className="text-center text-sm">
+            <span className="text-gray-300">
+              Need <span className="font-bold text-yellow-300">{formatNumber(totalNeeded - coins)}</span> more coins to
+              advance
+            </span>
+          </div>
+        </div>
+
+        {/* Leaderboard Section - Collapsible */}
+        <div className="bg-gray-800 bg-opacity-30 rounded-lg p-4 border border-gray-700">
+          <div className="mb-2 flex items-center justify-between cursor-pointer" onClick={toggleLeaderboard}>
+            <h3 className="text-xl font-bold text-white">Top Players</h3>
+            <div className="flex">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleSliderScroll("up")
+                }}
+                className="h-8 w-8 rounded-l-lg bg-gray-700 text-gray-300 transition-colors hover:bg-gray-600 hover:text-white flex items-center justify-center"
+              >
+                <FontAwesomeIcon icon={icons.chevronUp} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleSliderScroll("down")
+                }}
+                className="h-8 w-8 rounded-r-lg bg-gray-700 text-gray-300 transition-colors hover:bg-gray-600 hover:text-white flex items-center justify-center"
+              >
+                <FontAwesomeIcon icon={icons.chevronDown} />
+              </button>
+            </div>
+          </div>
+
+          <div
+            className={`relative overflow-hidden transition-all duration-500 ${
+              isLeaderboardCollapsed ? "max-h-0" : "max-h-[300px]"
+            }`}
+          >
             <div
               ref={sliderRef}
-              className="overflow-y-auto scrollbar-hide h-full"
+              className="overflow-y-auto scrollbar-hide"
               style={{
                 scrollSnapType: "y mandatory",
                 scrollBehavior: "smooth",
+                maxHeight: "300px",
               }}
             >
-              {leaderboardData[currentLeague].map((user, index) => (
+              {leaderboardData[currentLeague]?.map((user, index) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between py-2 border-b border-gray-700"
+                  className="flex items-center border-b border-gray-700 py-3 transition-all duration-300"
                   style={{ scrollSnapAlign: "start" }}
                 >
-                  <div className="flex items-center">
+                  {/* Rank */}
+                  <div className="mr-3">
                     {index < 3 ? (
-                      <FontAwesomeIcon
-                        icon={icons.star}
-                        className={`mr-2 text-lg ${index === 0 ? "text-yellow-400" : index === 1 ? "text-gray-400" : "text-yellow-700"}`}
-                      />
+                      <div
+                        className="flex h-10 w-10 items-center justify-center rounded-full"
+                        style={{
+                          background:
+                            index === 0
+                              ? "linear-gradient(135deg, #FFD700, #FFA500)"
+                              : index === 1
+                                ? "linear-gradient(135deg, #C0C0C0, #A9A9A9)"
+                                : "linear-gradient(135deg, #CD7F32, #8B4513)",
+                          boxShadow: `0 0 10px ${index === 0 ? "rgba(255, 215, 0, 0.5)" : index === 1 ? "rgba(192, 192, 192, 0.5)" : "rgba(205, 127, 50, 0.5)"}`,
+                        }}
+                      >
+                        <FontAwesomeIcon icon={icons.star} className="text-white" />
+                      </div>
                     ) : (
-                      <span className="mr-2 w-6 text-center text-lg">#{index + 1}</span>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-700 font-bold text-gray-300">
+                        {index + 1}
+                      </div>
                     )}
-                    <Image
-                      src={user.avatar || "/placeholder.svg"}
-                      alt={user.name}
-                      width={48}
-                      height={48}
-                      className="rounded-full mr-2 border-2 border-white"
-                    />
-                    <span className="text-lg font-bold">{user.name}</span>
                   </div>
-                  <div className="text-yellow-400 text-lg font-semibold">
-                    {user.coins.toLocaleString()} <FontAwesomeIcon icon={icons.coins} />
+
+                  {/* User info */}
+                  <div className="flex flex-1 items-center">
+                    <div
+                      className="mr-3 flex h-12 w-12 items-center justify-center rounded-full text-xl font-bold"
+                      style={{
+                        background: `linear-gradient(135deg, ${colors.secondary}40, ${colors.primary}80)`,
+                        color: colors.text,
+                      }}
+                    >
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-white text-lg">{user.name}</div>
+                      <div className="text-sm text-gray-400">Rank #{index + 1}</div>
+                    </div>
+                    <div className="flex items-center text-xl font-bold text-yellow-400">
+                      {formatNumber(user.coins)}
+                      <FontAwesomeIcon icon={icons.coins} className="ml-2" />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-            <button
-              onClick={() => handleSliderScroll("up")}
-              className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-yellow-400 text-gray-900 rounded-full p-1 hover:bg-yellow-300 transition-colors"
-            >
-              <FontAwesomeIcon icon={icons.chevronUp} />
-            </button>
-            <button
-              onClick={() => handleSliderScroll("down")}
-              className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 bg-yellow-400 text-gray-900 rounded-full p-1 hover:bg-yellow-300 transition-colors"
-            >
-              <FontAwesomeIcon icon={icons.chevronDown} />
-            </button>
+          </div>
+
+          {/* Collapse/Expand indicator */}
+          <div
+            className="flex justify-center mt-2 cursor-pointer text-gray-400 hover:text-gray-300"
+            onClick={toggleLeaderboard}
+          >
+            <FontAwesomeIcon
+              icon={isLeaderboardCollapsed ? icons.chevronDown : icons.chevronUp}
+              className="transition-transform duration-300"
+            />
           </div>
         </div>
       </div>
     </div>
   )
+}
+
+// Helper function to format numbers in a more readable way
+function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + "M"
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + "K"
+  }
+  return num.toString()
 }

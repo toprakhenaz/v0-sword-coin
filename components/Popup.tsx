@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
+import { useLeagueData } from "@/data/GeneralData"
 
 interface PopupProps {
   title: string
@@ -13,6 +14,8 @@ interface PopupProps {
 
 export default function Popup({ title, message, image, onClose }: PopupProps) {
   const [isVisible, setIsVisible] = useState(false)
+  const { getLeagueColors } = useLeagueData()
+  const colors = getLeagueColors(6) // Use league 6 colors for the popup
 
   // Animation for entrance
   useEffect(() => {
@@ -44,15 +47,17 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 transition-all duration-300"
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-50 transition-all duration-300 backdrop-blur-sm"
       style={{ opacity: isVisible ? 1 : 0 }}
       onClick={handleClose}
     >
       <div
-        className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-2xl p-6 shadow-2xl relative w-[90%] max-w-sm text-center border border-gray-700 transform transition-transform duration-300"
+        className="rounded-2xl p-6 shadow-2xl relative w-[90%] max-w-sm text-center transform transition-transform duration-300"
         style={{
+          background: `linear-gradient(to bottom, ${colors.primary}90, ${colors.secondary}70)`,
+          border: `1px solid ${colors.secondary}`,
+          boxShadow: `0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3), 0 0 15px ${colors.glow}`,
           transform: isVisible ? "scale(1)" : "scale(0.9)",
-          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -65,11 +70,20 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
 
         <div className="mb-2 mx-auto w-20 h-1 bg-gray-700 rounded-full"></div>
 
-        <h2 className="text-2xl font-bold mb-3 text-white">{title}</h2>
+        <h2 className="text-2xl font-bold mb-3" style={{ color: colors.text }}>
+          {title}
+        </h2>
         <p className="mb-4 text-gray-200">{message}</p>
 
         <div className="relative mb-5 p-2">
-          <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/20 via-orange-500/20 to-yellow-500/20 rounded-xl animate-pulse"></div>
+          <div
+            className="absolute inset-0 rounded-xl animate-pulse"
+            style={{
+              background: `linear-gradient(to right, ${colors.primary}40, ${colors.secondary}40, ${colors.primary}40)`,
+              backgroundSize: "200% 100%",
+              animation: "shimmer 2s infinite linear",
+            }}
+          ></div>
           <img
             src={image || "/placeholder.svg"}
             alt="Popup Image"
@@ -80,7 +94,11 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
 
         <button
           onClick={handleClose}
-          className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold rounded-lg transition-all duration-300 shadow-lg hover:shadow-blue-500/30 transform hover:-translate-y-1 active:translate-y-0"
+          className="w-full py-3 px-4 text-white font-bold rounded-lg transition-all duration-300 shadow-lg transform hover:-translate-y-1 active:translate-y-0"
+          style={{
+            background: `linear-gradient(to right, ${colors.secondary}, ${colors.primary})`,
+            boxShadow: `0 4px 12px ${colors.glow}`,
+          }}
         >
           Tamam
         </button>

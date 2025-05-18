@@ -3,22 +3,42 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import type { CoinDisplayProps } from "@/types"
-import { ligImage } from "@/data/GeneralData"
+import { useLeagueData } from "@/data/GeneralData"
 
 export default function CoinDisplay({ coins, league, onclick }: CoinDisplayProps) {
+  const { getLeagueImage, getLeagueColors, getLeagueName } = useLeagueData()
+  const colors = getLeagueColors(league)
+
   return (
-    <div className="flex justify-between items-center">
-      <div className="flex items-center bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full py-2 px-4 shadow-md">
-        <FontAwesomeIcon icon={icons.coins} className="text-yellow-100 mr-2 text-xl" />
-        <span className="text-2xl font-bold text-white">{coins}</span>
-      </div>
+    <div className="flex justify-between items-center gap-3 mb-4">
       <button
-        className="flex items-center bg-gradient-to-r from-blue-400 to-blue-600 rounded-full py-2 px-4 shadow-md transform hover:scale-105 transition-transform duration-300"
+        className="flex-1 flex items-center justify-center bg-gradient-to-r from-amber-700 to-amber-800 rounded-full py-2 px-4 shadow-md"
+        onClick={() => {}}
+      >
+        <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
+        <span className="text-white font-bold">{coins.toLocaleString()}</span>
+      </button>
+
+      <button
+        className="flex items-center justify-center rounded-full py-2 px-4 border-2 shadow-md hover:bg-gray-800/30 transition-all duration-300 relative"
+        style={{
+          borderColor: colors.primary,
+          background: "transparent",
+        }}
         onClick={onclick}
       >
-        <img src={ligImage[league] || "/placeholder.svg"} className="text-blue-100 mr-2 text-xl w-8 h-8" />
-        <span className="text-lg font-semibold whitespace-nowrap text-white">Lig {league}</span>
-        <FontAwesomeIcon icon={icons.arrowRight} className="ml-2 text-blue-100" />
+        <span className="text-white font-medium mr-1">{getLeagueName(league)}</span>
+        <span className="text-white font-bold">{league}</span>
+
+        {/* Added down arrow icon to indicate it's clickable */}
+        <FontAwesomeIcon
+          icon={icons.chevronDown}
+          className="ml-1 text-yellow-400 animate-bounce"
+          style={{
+            fontSize: "0.75rem",
+            animationDuration: "2s",
+          }}
+        />
       </button>
     </div>
   )

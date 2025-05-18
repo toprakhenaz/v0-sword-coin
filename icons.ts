@@ -1,6 +1,6 @@
 import {
   faCoins,
-  faSwords,
+  faGem,
   faHome,
   faUserGroup,
   faTimes,
@@ -17,12 +17,15 @@ import {
   faAngleDoubleUp,
   faBolt,
   faRocket,
-  faCopy,
+  faHammer,
+  faHandPointer,
+  faBatteryFull,
+  faBatteryHalf,
 } from "@fortawesome/free-solid-svg-icons"
 
 export const icons = {
   coins: faCoins,
-  swords: faSwords,
+  swords: faGem, // Replace faSwords with faGem but keep the same key
   home: faHome,
   userGroup: faUserGroup,
   times: faTimes,
@@ -39,5 +42,8 @@ export const icons = {
   angleDoubleUp: faAngleDoubleUp,
   bolt: faBolt,
   rocket: faRocket,
-  copy: faCopy,
+  pickaxe: faHammer, // Changed from faPickaxe to faHammer
+  handPointer: faHandPointer,
+  batteryFull: faBatteryFull,
+  batteryHalf: faBatteryHalf,
 }

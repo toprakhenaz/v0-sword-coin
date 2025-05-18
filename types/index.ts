@@ -1,6 +1,5 @@
 import type React from "react"
 // Common types for the application
-import type { ReactNode } from "react"
 
 // Card Component Types
 export interface CardData {
@@ -49,7 +48,7 @@ export interface CoinDisplayProps {
 export interface HeaderProps {
   earnPerTap: number
   coinsToLevelUp: number
-  crystals: number
+  hourlyEarn: number
 }
 
 // Central Button Types
@@ -69,18 +68,19 @@ export interface EnergyBarProps {
   energy: number
   maxEnergy: number
   boost: () => void
+  onOpenBoostOverlay: () => void
+  league?: number
 }
 
 // Referance Row Types
 export interface RefferanceRowProps {
   referance: {
-    id: number
-    referencedId: number
+    referencedId: string
     referancedName: string
     referenceAmount: number
     isClaimed: boolean
   }
-  collectCoins: (id: number) => void
+  collectCoins: (id: string) => void
   isAnimating?: boolean
 }
 
@@ -89,34 +89,34 @@ export interface FriendsProps {
   length: number
 }
 
-// Progress Component Types
+// EarnCard Types
+export interface EarnCardProps {
+  className?: string
+  children?: React.ReactNode
+}
+
+// Progress Types
 export interface ProgressProps {
   value: number
   className?: string
 }
 
-// Modal Component Types
+// Modal Types
 export interface ModalProps {
   isOpen: boolean
   onClose: () => void
-  children: ReactNode
+  children: React.ReactNode
 }
 
-// Button Component Types
+// Button Types
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string
-  children: ReactNode
+  children: React.ReactNode
   disabled?: boolean
 }
 
-// Alert Component Types
+// Alert Types
 export interface AlertProps {
-  children: ReactNode
+  children: React.ReactNode
   isGreen?: boolean
-}
-
-// EarnCard Component Types
-export interface EarnCardProps {
-  className?: string
-  children?: ReactNode
 }

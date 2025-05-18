@@ -1,4 +1,7 @@
+"use client"
+
 import type React from "react"
+
 import type { ButtonProps } from "@/types"
 
 export const Button: React.FC<ButtonProps> = ({ className = "", children, disabled = false, ...props }) => (
