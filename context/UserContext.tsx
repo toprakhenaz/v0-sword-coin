@@ -1,7 +1,17 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
+import {
+  updateUserCoins,
+  updateUserEnergy,
+  upgradeBoost,
+  useRocketBoost,
+  useFullEnergyBoost,
+  collectHourlyEarnings,
+  getUserDailyCombo,
+  findDailyComboCard,
+} from "@/lib/db-actions"
 
 // For demo purposes, we'll use a hardcoded user ID
 // In a real Telegram app, you would get this from the Telegram WebApp
@@ -19,12 +29,42 @@ type UserContextType = {
   hourlyEarn: number
   league: number
   isLoading: boolean
-  isLevelingUp: boolean // Yeni: Seviye atlama animasyonu için
-  previousLeague: number | null // Yeni: Önceki seviyeyi takip etmek için
+  isLevelingUp: boolean
+  previousLeague: number | null
+  dailyCombo: {
+    cardIds: number[]
+    foundCardIds: number[]
+    reward: number
+    isCompleted: boolean
+  }
+  boosts: {
+    multiTouch: { level: number; cost: number }
+    energyLimit: { level: number; cost: number }
+    chargeSpeed: { level: number; cost: number }
+    dailyRockets: number
+    maxDailyRockets: number
+    energyFullUsed: boolean
+  }
   updateCoins: (amount: number, transactionType: string, description?: string) => Promise<void>
   updateEnergy: (amount: number) => Promise<void>
   refreshUserData: () => Promise<void>
-  setLeague: (league: number) => void // Yeni: Seviyeyi manuel olarak ayarlamak için
+  setLeague: (league: number) => void
+  handleTap: () => Promise<void>
+  collectHourlyEarnings: () => () => Promise<{ success: boolean; coins?: number; message?: string }>
+  upgradeBoost: (boostType: string) => Promise<{ success: boolean; message?: string }>
+  useRocketBoost: () => {
+    result: { success: boolean; message?: string } | null
+    isLoading: boolean
+    handleRocketBoost: () => Promise<void>
+  }
+  useFullEnergyBoost: () => Promise<{ success: boolean; message?: string }>
+  findComboCard: (cardIndex: number) => Promise<{
+    success: boolean
+    cardId?: number
+    isCompleted?: boolean
+    reward?: number
+    message?: string
+  }>
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -43,6 +83,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isLevelingUp, setIsLevelingUp] = useState(false)
   const [lastEnergyUpdate, setLastEnergyUpdate] = useState<Date>(new Date())
+  const [comboCounter, setComboCounter] = useState(0)
+  const [tapMultiplier, setTapMultiplier] = useState(1)
+  const [dailyCombo, setDailyCombo] = useState({
+    cardIds: [1, 2, 3],
+    foundCardIds: [],
+    reward: 100000,
+    isCompleted: false,
+  })
+  const [boosts, setBoosts] = useState({
+    multiTouch: { level: 1, cost: 2000 },
+    energyLimit: { level: 1, cost: 2000 },
+    chargeSpeed: { level: 1, cost: 2000 },
+    dailyRockets: 3,
+    maxDailyRockets: 3,
+    energyFullUsed: false,
+  })
 
   // Seviyeyi değiştirmek için fonksiyon
   const setLeague = (newLeague: number) => {
@@ -105,6 +161,44 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setHourlyEarn(existingUser.hourly_earn)
           setLeagueState(existingUser.league)
           setLastEnergyUpdate(new Date(existingUser.last_energy_regen))
+
+          // Load user boosts
+          const { data: userBoosts } = await supabase
+            .from("user_boosts")
+            .select("*")
+            .eq("user_id", existingUser.id)
+            .single()
+
+          if (userBoosts) {
+            setBoosts({
+              multiTouch: {
+                level: userBoosts.multi_touch_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
+              },
+              energyLimit: {
+                level: userBoosts.energy_limit_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
+              },
+              chargeSpeed: {
+                level: userBoosts.charge_speed_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
+              },
+              dailyRockets: userBoosts.daily_rockets,
+              maxDailyRockets: userBoosts.max_daily_rockets,
+              energyFullUsed: userBoosts.energy_full_used,
+            })
+          }
+
+          // Load daily combo
+          const dailyComboData = await getUserDailyCombo(existingUser.id)
+          if (dailyComboData) {
+            setDailyCombo({
+              cardIds: dailyComboData.card_ids,
+              foundCardIds: dailyComboData.found_card_ids,
+              reward: dailyComboData.reward,
+              isCompleted: dailyComboData.is_completed,
+            })
+          }
         } else {
           // Create new user
           const { data: newUser } = await supabase
@@ -120,6 +214,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 energy: 100,
                 max_energy: 100,
                 last_energy_regen: new Date().toISOString(),
+                last_hourly_collect: new Date().toISOString(),
               },
             ])
             .select()
@@ -147,6 +242,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 energy_full_used: false,
               },
             ])
+
+            // Create initial daily combo
+            const dailyComboData = await getUserDailyCombo(newUser.id)
+            if (dailyComboData) {
+              setDailyCombo({
+                cardIds: dailyComboData.card_ids,
+                foundCardIds: dailyComboData.found_card_ids,
+                reward: dailyComboData.reward,
+                isCompleted: dailyComboData.is_completed,
+              })
+            }
           }
         }
 
@@ -169,7 +275,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const minutesPassed = timeDiffMs / (1000 * 60)
 
       // Base regeneration: 1 energy per minute, modified by charge speed level
-      const chargeMultiplier = 1 // This should be based on the charge_speed_level
+      const chargeMultiplier = 1 + (boosts.chargeSpeed.level - 1) * 0.2 // 20% increase per level
       const energyToAdd = Math.floor(minutesPassed * chargeMultiplier)
 
       if (energyToAdd > 0) {
@@ -193,25 +299,70 @@ export function UserProvider({ children }: { children: ReactNode }) {
           })
       }
     }
-  }, [userId, energy, maxEnergy, lastEnergyUpdate])
+  }, [userId, energy, maxEnergy, lastEnergyUpdate, boosts.chargeSpeed.level])
 
   // Energy regeneration timer
+  const updateEnergyHandler = useCallback(
+    async (amount: number) => {
+      if (!userId) return
+
+      // Calculate new energy (ensure it doesn't go below 0 or above max)
+      const newEnergy = Math.max(0, Math.min(maxEnergy, energy + amount))
+
+      // Only update if energy changed
+      if (newEnergy !== energy) {
+        // Update local state immediately for responsive UI
+        setEnergy(newEnergy)
+        setLastEnergyUpdate(new Date())
+
+        // Update in database (don't await this to keep UI responsive)
+        try {
+          await updateUserEnergy(userId, amount)
+        } catch (error) {
+          console.error("Error updating energy:", error)
+          // Revert local state if database update fails
+          setEnergy(energy)
+        }
+
+        return newEnergy
+      }
+
+      return energy
+    },
+    [userId, energy, maxEnergy],
+  )
+
   useEffect(() => {
     let energyInterval: NodeJS.Timeout | null = null
 
     if (userId && energy < maxEnergy) {
+      const chargeMultiplier = 1 + (boosts.chargeSpeed.level - 1) * 0.2 // 20% increase per level
+      const regenTime = 60000 / chargeMultiplier // Adjust regen time based on charge speed
+
       energyInterval = setInterval(() => {
-        updateEnergy(1)
-      }, 60000) // 1 minute
+        updateEnergyHandler(1)
+      }, regenTime) // Adjusted time
     }
 
     return () => {
       if (energyInterval) clearInterval(energyInterval)
     }
-  }, [userId, energy, maxEnergy])
+  }, [userId, energy, maxEnergy, boosts.chargeSpeed.level, updateEnergyHandler])
+
+  // Combo system
+  useEffect(() => {
+    if (comboCounter > 0) {
+      const comboTimeout = setTimeout(() => {
+        setComboCounter(0)
+        setTapMultiplier(1)
+      }, 2000) // Reset combo after 2 seconds of inactivity
+
+      return () => clearTimeout(comboTimeout)
+    }
+  }, [comboCounter])
 
   // Update coins in state and database
-  const updateCoins = async (amount: number, transactionType: string, description?: string) => {
+  const updateCoinsHandler = async (amount: number, transactionType: string, description?: string) => {
     if (!userId) return
 
     // Update local state
@@ -219,23 +370,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setCoins(newCoins)
 
     // Update in database
-    await supabase
-      .from("users")
-      .update({
-        coins: newCoins,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-
-    // Log transaction
-    await supabase.from("transactions").insert([
-      {
-        user_id: userId,
-        amount,
-        transaction_type: transactionType,
-        description,
-      },
-    ])
+    await updateUserCoins(userId, amount, transactionType, description)
 
     // Check if user should be promoted to next league
     if (amount > 0) {
@@ -269,99 +404,226 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Only update if league has changed and is higher than current league
     if (newLeague > league) {
-      try {
-        // Set animation state first
-        setPreviousLeague(league)
-        setIsLevelingUp(true)
-
-        // Update database
-        const { error } = await supabase
-          .from("users")
-          .update({
-            league: newLeague,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", userId)
-
-        if (error) {
-          console.error("Error updating league:", error)
-          setIsLevelingUp(false)
-          return
-        }
-
-        // Update state after a short delay for animation
-        setTimeout(() => {
-          setLeagueState(newLeague)
-
-          // End animation after transition completes
-          setTimeout(() => {
-            setIsLevelingUp(false)
-          }, 1000)
-        }, 500)
-      } catch (error) {
-        console.error("Error in league promotion:", error)
-        setIsLevelingUp(false)
-      }
+      setLeague(newLeague)
     }
   }
 
-  // Update energy in state and database
-  const updateEnergy = async (amount: number) => {
-    if (!userId) return
+  // Handle tap action
+  const handleTap = async () => {
+    if (energy <= 0) return // Don't proceed if no energy
 
-    // Calculate new energy (ensure it doesn't go below 0 or above max)
-    const newEnergy = Math.max(0, Math.min(maxEnergy, energy + amount))
+    // Immediately update UI state first for responsive feedback
+    const newCombo = comboCounter + 1
+    setComboCounter(newCombo)
 
-    // Only update if energy changed
-    if (newEnergy !== energy) {
-      // Update local state immediately for responsive UI
-      setEnergy(newEnergy)
-      setLastEnergyUpdate(new Date())
+    // Calculate tap multiplier
+    let multiplier = 1
+    if (newCombo > 50)
+      multiplier = 3 // Max multiplier is 3x
+    else if (newCombo > 25) multiplier = 2
+    else if (newCombo > 10) multiplier = 1.5
 
-      // Update in database (don't await this to keep UI responsive)
-      try {
-        await supabase
-          .from("users")
-          .update({
-            energy: newEnergy,
-            last_energy_regen: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", userId)
-      } catch (error) {
-        console.error("Error updating energy:", error)
-        // Revert local state if database update fails
-        setEnergy(energy)
-      }
+    setTapMultiplier(multiplier)
 
-      return newEnergy
-    }
+    // Calculate coins to earn
+    const coinsToEarn = Math.round(earnPerTap * multiplier)
 
-    return energy
+    // Update coins and energy in parallel
+    await Promise.all([
+      updateCoinsHandler(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`),
+      updateEnergyHandler(-1),
+    ])
   }
 
-  // Refresh user data from database
+  // Collect hourly earnings
+  const collectHourlyEarningsHandler = useCallback(async () => {
+    if (!userId) return { success: false, message: "User not found" }
+
+    const result = await collectHourlyEarnings(userId)
+
+    if (result.success && result.coins) {
+      setCoins(coins + result.coins)
+      return { success: true, coins: result.coins }
+    }
+
+    return { success: false, message: result.message || "Failed to collect earnings" }
+  }, [coins, userId])
+
+  // Upgrade boost
+  const upgradeBoostHandler = async (boostType: string) => {
+    if (!userId) return { success: false, message: "User not found" }
+
+    const result = await upgradeBoost(userId, boostType)
+
+    if (result.success) {
+      // Update local state
+      const updatedBoosts = { ...boosts }
+
+      if (boostType === "multiTouch") {
+        updatedBoosts.multiTouch.level = result.newLevel || boosts.multiTouch.level + 1
+        updatedBoosts.multiTouch.cost = result.cost || Math.floor(boosts.multiTouch.cost * 1.5)
+        setEarnPerTap(1 + (updatedBoosts.multiTouch.level - 1) * 2)
+      } else if (boostType === "energyLimit") {
+        updatedBoosts.energyLimit.level = result.newLevel || boosts.energyLimit.level + 1
+        updatedBoosts.energyLimit.cost = result.cost || Math.floor(boosts.energyLimit.cost * 1.5)
+        setMaxEnergy(100 + (updatedBoosts.energyLimit.level - 1) * 500)
+      } else if (boostType === "chargeSpeed") {
+        updatedBoosts.chargeSpeed.level = result.newLevel || boosts.chargeSpeed.level + 1
+        updatedBoosts.chargeSpeed.cost = result.cost || Math.floor(boosts.chargeSpeed.cost * 1.5)
+      }
+
+      setBoosts(updatedBoosts)
+
+      // Calculate cost based on boost type
+      let cost = 0
+      if (boostType === "multiTouch") {
+        cost = boosts.multiTouch.cost
+      } else if (boostType === "energyLimit") {
+        cost = boosts.energyLimit.cost
+      } else if (boostType === "chargeSpeed") {
+        cost = boosts.chargeSpeed.cost
+      }
+
+      // Update coins
+      setCoins(coins - cost)
+
+      return { success: true }
+    }
+
+    return { success: false, message: result.message || "Failed to upgrade boost" }
+  }
+
+  // Use rocket boost
+  const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
+  const [isLoadingRocket, setIsLoadingRocket] = useState(false)
+
+  const handleRocketBoost = useCallback(async () => {
+    if (!userId || isLoadingRocket) return
+
+    setIsLoadingRocket(true)
+    const boostResult = await useRocketBoost(userId)
+    setResultRocket(boostResult)
+    setIsLoadingRocket(false)
+
+    if (boostResult.success) {
+      // Update local state
+      setBoosts({
+        ...boosts,
+        dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
+      })
+      setEnergy(Math.min(maxEnergy, energy + 500))
+    }
+  }, [boosts, energy, maxEnergy, userId, isLoadingRocket])
+
+  const rocketBoost = () => {
+    return {
+      result: resultRocket,
+      isLoading: isLoadingRocket,
+      handleRocketBoost,
+    }
+  }
+
+  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
+
+  // Use full energy boost
+  const useFullEnergyBoostHandler = useCallback(async () => {
+    if (!userId) return { success: false, message: "User not found" }
+
+    const result = await useFullEnergyBoost(userId)
+    setResultFullEnergy(result)
+
+    if (result.success) {
+      // Update local state
+      setBoosts({
+        ...boosts,
+        energyFullUsed: true,
+      })
+      setEnergy(maxEnergy)
+
+      return { success: true }
+    }
+
+    return { success: false, message: result.message || "Failed to use full energy boost" }
+  }, [boosts, energy, maxEnergy, userId])
+
   const refreshUserData = async () => {
-    if (!userId) return
+    try {
+      if (!userId) return
 
-    const { data: user } = await supabase.from("users").select("*").eq("id", userId).single()
+      // Fetch user data
+      const { data: userData } = await supabase.from("users").select("*").eq("id", userId).single()
 
-    if (user) {
-      setCoins(user.coins)
-      setEnergy(user.energy)
-      setMaxEnergy(user.max_energy)
-      setEarnPerTap(user.earn_per_tap)
-      setHourlyEarn(user.hourly_earn)
-
-      // Eğer lig değiştiyse, animasyonla güncelle
-      if (user.league !== league) {
-        setLeague(user.league)
-      } else {
-        setLeagueState(user.league)
+      if (userData) {
+        setCoins(userData.coins)
+        setEnergy(userData.energy)
+        setMaxEnergy(userData.max_energy)
+        setEarnPerTap(userData.earn_per_tap)
+        setHourlyEarn(userData.hourly_earn)
+        setLeagueState(userData.league)
+        setLastEnergyUpdate(new Date(userData.last_energy_regen))
       }
 
-      setLastEnergyUpdate(new Date(user.last_energy_regen))
+      // Fetch user boosts
+      const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", userId).single()
+
+      if (userBoosts) {
+        setBoosts({
+          multiTouch: {
+            level: userBoosts.multi_touch_level,
+            cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
+          },
+          energyLimit: {
+            level: userBoosts.energy_limit_level,
+            cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
+          },
+          chargeSpeed: {
+            level: userBoosts.charge_speed_level,
+            cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
+          },
+          dailyRockets: userBoosts.daily_rockets,
+          maxDailyRockets: userBoosts.max_daily_rockets,
+          energyFullUsed: userBoosts.energy_full_used,
+        })
+      }
+
+      // Fetch daily combo
+      const dailyComboData = await getUserDailyCombo(userId)
+      if (dailyComboData) {
+        setDailyCombo({
+          cardIds: dailyComboData.card_ids,
+          foundCardIds: dailyComboData.found_card_ids,
+          reward: dailyComboData.reward,
+          isCompleted: dailyComboData.is_completed,
+        })
+      }
+    } catch (error) {
+      console.error("Error refreshing user data:", error)
     }
+  }
+
+  const findComboCardHandler = async (cardIndex: number) => {
+    if (!userId) return { success: false, message: "User not found" }
+
+    const result = await findDailyComboCard(userId, cardIndex)
+
+    if (result.success) {
+      // Update local state
+      const updatedDailyCombo = { ...dailyCombo }
+      updatedDailyCombo.foundCardIds = result.foundCardIds || dailyCombo.foundCardIds
+      updatedDailyCombo.isCompleted = result.isCompleted || dailyCombo.isCompleted
+
+      setDailyCombo(updatedDailyCombo)
+      refreshUserData()
+
+      return {
+        success: true,
+        cardId: result.cardId,
+        isCompleted: result.isCompleted,
+        reward: result.reward,
+      }
+    }
+
+    return { success: false, message: result.message || "Failed to find combo card" }
   }
 
   return (
@@ -379,10 +641,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
         isLoading,
         isLevelingUp,
         previousLeague,
-        updateCoins,
-        updateEnergy,
+        dailyCombo,
+        boosts,
+        updateCoins: updateCoinsHandler,
+        updateEnergy: updateEnergyHandler,
         refreshUserData,
         setLeague,
+        handleTap,
+        collectHourlyEarnings: collectHourlyEarningsHandler,
+        upgradeBoost: upgradeBoostHandler,
+        useRocketBoost: rocketBoost,
+        useFullEnergyBoost: useFullEnergyBoostHandler,
+        findComboCard: findComboCardHandler,
       }}
     >
       {children}

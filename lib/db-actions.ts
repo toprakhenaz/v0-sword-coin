@@ -17,6 +17,8 @@ export async function getUserByTelegramId(telegramId: string) {
 
 export async function createUser(telegramId: string, username: string) {
   const supabase = createServerClient()
+
+  // Create user with default values
   const { data, error } = await supabase
     .from("users")
     .insert([
@@ -29,6 +31,8 @@ export async function createUser(telegramId: string, username: string) {
         earn_per_tap: 1,
         energy: 100,
         max_energy: 100,
+        last_energy_regen: new Date().toISOString(),
+        last_hourly_collect: new Date().toISOString(),
       },
     ])
     .select()
@@ -40,7 +44,20 @@ export async function createUser(telegramId: string, username: string) {
   }
 
   // Create initial boosts for the user
-  await supabase.from("user_boosts").insert([{ user_id: data.id }])
+  await supabase.from("user_boosts").insert([
+    {
+      user_id: data.id,
+      multi_touch_level: 1,
+      energy_limit_level: 1,
+      charge_speed_level: 1,
+      daily_rockets: 3,
+      max_daily_rockets: 3,
+      energy_full_used: false,
+    },
+  ])
+
+  // Create initial daily combo
+  await createDailyCombo(data.id)
 
   return data
 }
@@ -126,16 +143,69 @@ export async function upgradeItem(userId: string, itemId: number) {
     .eq("item_id", itemId)
     .single()
 
+  // If user doesn't have this item yet, create it
   if (itemError) {
-    console.error("Error fetching user item:", itemError)
-    return null
+    // Get base item details
+    const { data: baseItem, error: baseItemError } = await supabase.from("items").select("*").eq("id", itemId).single()
+
+    if (baseItemError) {
+      console.error("Error fetching base item:", baseItemError)
+      return { success: false, message: "Item not found" }
+    }
+
+    // Get user coins
+    const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
+
+    if (userError) {
+      console.error("Error fetching user:", userError)
+      return { success: false, message: "User not found" }
+    }
+
+    // Check if user has enough coins
+    if (user.coins < baseItem.base_upgrade_cost) {
+      return { success: false, message: "Not enough coins" }
+    }
+
+    // Create user item
+    const { data: newUserItem, error: createError } = await supabase
+      .from("user_items")
+      .insert([
+        {
+          user_id: userId,
+          item_id: itemId,
+          level: 1,
+          hourly_income: baseItem.base_hourly_income,
+          upgrade_cost: baseItem.base_upgrade_cost,
+        },
+      ])
+      .select()
+      .single()
+
+    if (createError) {
+      console.error("Error creating user item:", createError)
+      return { success: false, message: "Error creating item" }
+    }
+
+    // Deduct coins from user
+    await updateUserCoins(userId, -baseItem.base_upgrade_cost, "item_purchase", `Purchased item ${itemId}`)
+
+    // Update user hourly earn
+    await updateUserHourlyEarn(userId)
+
+    return {
+      success: true,
+      level: 1,
+      hourlyIncome: baseItem.base_hourly_income,
+      upgradeCost: baseItem.base_upgrade_cost * 2,
+    }
   }
 
+  // User already has this item, upgrade it
   const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
 
   if (userError) {
     console.error("Error fetching user:", userError)
-    return null
+    return { success: false, message: "User not found" }
   }
 
   // Check if user has enough coins
@@ -179,7 +249,7 @@ export async function upgradeItem(userId: string, itemId: number) {
 }
 
 // Calculate and update user's total hourly earn
-async function updateUserHourlyEarn(userId: string) {
+export async function updateUserHourlyEarn(userId: string) {
   const supabase = createServerClient()
 
   // Get all user items
@@ -190,7 +260,7 @@ async function updateUserHourlyEarn(userId: string) {
 
   if (itemsError) {
     console.error("Error fetching user items:", itemsError)
-    return
+    return 0
   }
 
   // Calculate total hourly earn
@@ -228,6 +298,63 @@ export async function getUserTasks(userId: string) {
   return data
 }
 
+export async function startTask(userId: string, taskId: number) {
+  const supabase = createServerClient()
+
+  // Check if user task exists
+  const { data: existingTask, error: checkError } = await supabase
+    .from("user_tasks")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("task_id", taskId)
+    .single()
+
+  if (checkError && checkError.code !== "PGRST116") {
+    console.error("Error checking task:", checkError)
+    return { success: false, message: "Error checking task" }
+  }
+
+  if (existingTask) {
+    // Task exists, update progress
+    const newProgress = Math.min(100, existingTask.progress + 50)
+
+    const { error: updateError } = await supabase
+      .from("user_tasks")
+      .update({
+        progress: newProgress,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingTask.id)
+
+    if (updateError) {
+      console.error("Error updating task:", updateError)
+      return { success: false, message: "Error updating task" }
+    }
+
+    return { success: true, progress: newProgress, userTaskId: existingTask.id }
+  } else {
+    // Create new user task
+    const { data: newTask, error: createError } = await supabase
+      .from("user_tasks")
+      .insert([
+        {
+          user_id: userId,
+          task_id: taskId,
+          progress: 50,
+        },
+      ])
+      .select()
+      .single()
+
+    if (createError) {
+      console.error("Error creating task:", createError)
+      return { success: false, message: "Error creating task" }
+    }
+
+    return { success: true, progress: 50, userTaskId: newTask.id }
+  }
+}
+
 export async function completeTask(userId: string, taskId: number) {
   const supabase = createServerClient()
 
@@ -241,7 +368,7 @@ export async function completeTask(userId: string, taskId: number) {
 
   if (taskError) {
     console.error("Error fetching user task:", taskError)
-    return null
+    return { success: false, message: "Task not found" }
   }
 
   // Check if task is already completed
@@ -249,11 +376,15 @@ export async function completeTask(userId: string, taskId: number) {
     return { success: false, message: "Task already completed" }
   }
 
+  // Check if task progress is 100%
+  if (userTask.progress < 100) {
+    return { success: false, message: "Task not ready to complete" }
+  }
+
   // Update task status
   const { error: updateError } = await supabase
     .from("user_tasks")
     .update({
-      progress: 100,
       is_completed: true,
       completed_at: new Date().toISOString(),
     })
@@ -298,7 +429,7 @@ export async function claimDailyReward(userId: string, day: number) {
 
   if (rewardError) {
     console.error("Error fetching daily reward:", rewardError)
-    return null
+    return { success: false, message: "Reward not found" }
   }
 
   // Check if already claimed
@@ -399,7 +530,7 @@ export async function getUserBoosts(userId: string) {
   return data
 }
 
-export async function upgradeBoost(userId: string, boostType: string, cost: number) {
+export async function upgradeBoost(userId: string, boostType: string) {
   const supabase = createServerClient()
 
   // Get user details
@@ -407,12 +538,7 @@ export async function upgradeBoost(userId: string, boostType: string, cost: numb
 
   if (userError) {
     console.error("Error fetching user:", userError)
-    return null
-  }
-
-  // Check if user has enough coins
-  if (user.coins < cost) {
-    return { success: false, message: "Not enough coins" }
+    return { success: false, message: "User not found" }
   }
 
   // Get current boost level
@@ -424,36 +550,37 @@ export async function upgradeBoost(userId: string, boostType: string, cost: numb
 
   if (boostError) {
     console.error("Error fetching user boosts:", boostError)
-    return null
+    return { success: false, message: "Boosts not found" }
   }
 
-  // Determine which boost to upgrade
+  // Determine which boost to upgrade and calculate cost
   const updateData: any = { updated_at: new Date().toISOString() }
   let newLevel = 0
+  let cost = 0
 
   switch (boostType) {
     case "multiTouch":
       newLevel = boost.multi_touch_level + 1
+      cost = 2000 * Math.pow(1.5, boost.multi_touch_level - 1)
       updateData.multi_touch_level = newLevel
       break
     case "energyLimit":
       newLevel = boost.energy_limit_level + 1
+      cost = 2000 * Math.pow(1.5, boost.energy_limit_level - 1)
       updateData.energy_limit_level = newLevel
-      // Also update user's max energy
-      await supabase
-        .from("users")
-        .update({
-          max_energy: 100 + (newLevel - 1) * 500,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
       break
     case "chargeSpeed":
       newLevel = boost.charge_speed_level + 1
+      cost = 2000 * Math.pow(1.5, boost.charge_speed_level - 1)
       updateData.charge_speed_level = newLevel
       break
     default:
       return { success: false, message: "Invalid boost type" }
+  }
+
+  // Check if user has enough coins
+  if (user.coins < cost) {
+    return { success: false, message: "Not enough coins" }
   }
 
   // Update boost
@@ -478,5 +605,413 @@ export async function upgradeBoost(userId: string, boostType: string, cost: numb
       .eq("id", userId)
   }
 
-  return { success: true, newLevel }
+  // If it's energyLimit, update user's max_energy
+  if (boostType === "energyLimit") {
+    await supabase
+      .from("users")
+      .update({
+        max_energy: 100 + (newLevel - 1) * 500,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+  }
+
+  return { success: true, newLevel, cost: Math.floor(cost * 1.5) }
+}
+
+export async function useRocketBoost(userId: string) {
+  const supabase = createServerClient()
+
+  // Get user boosts
+  const { data: boost, error: boostError } = await supabase
+    .from("user_boosts")
+    .select("daily_rockets")
+    .eq("user_id", userId)
+    .single()
+
+  if (boostError) {
+    console.error("Error fetching user boosts:", boostError)
+    return { success: false, message: "Boosts not found" }
+  }
+
+  // Check if user has rockets left
+  if (boost.daily_rockets <= 0) {
+    return { success: false, message: "No rockets left" }
+  }
+
+  // Update rockets count
+  const { error: updateError } = await supabase
+    .from("user_boosts")
+    .update({
+      daily_rockets: boost.daily_rockets - 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+
+  if (updateError) {
+    console.error("Error using rocket:", updateError)
+    return { success: false, message: "Error using rocket" }
+  }
+
+  // Add energy to user
+  await updateUserEnergy(userId, 500)
+
+  return { success: true, rocketsLeft: boost.daily_rockets - 1 }
+}
+
+export async function useFullEnergyBoost(userId: string) {
+  const supabase = createServerClient()
+
+  // Get user boosts
+  const { data: boost, error: boostError } = await supabase
+    .from("user_boosts")
+    .select("energy_full_used")
+    .eq("user_id", userId)
+    .single()
+
+  if (boostError) {
+    console.error("Error fetching user boosts:", boostError)
+    return { success: false, message: "Boosts not found" }
+  }
+
+  // Check if user has already used full energy today
+  if (boost.energy_full_used) {
+    return { success: false, message: "Full energy already used today" }
+  }
+
+  // Update energy_full_used
+  const { error: updateError } = await supabase
+    .from("user_boosts")
+    .update({
+      energy_full_used: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+
+  if (updateError) {
+    console.error("Error using full energy:", updateError)
+    return { success: false, message: "Error using full energy" }
+  }
+
+  // Get user's max energy
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("energy, max_energy")
+    .eq("id", userId)
+    .single()
+
+  if (userError) {
+    console.error("Error fetching user:", userError)
+    return { success: false, message: "User not found" }
+  }
+
+  // Fill user's energy to max
+  await updateUserEnergy(userId, user.max_energy - user.energy)
+
+  return { success: true }
+}
+
+// Referral system
+export async function createReferral(referrerId: string, referredId: string) {
+  const supabase = createServerClient()
+
+  // Check if referral already exists
+  const { data: existingReferral, error: checkError } = await supabase
+    .from("referrals")
+    .select("*")
+    .eq("referrer_id", referrerId)
+    .eq("referred_id", referredId)
+    .single()
+
+  if (!checkError && existingReferral) {
+    return { success: false, message: "Referral already exists" }
+  }
+
+  // Create referral
+  const { error: createError } = await supabase.from("referrals").insert([
+    {
+      referrer_id: referrerId,
+      referred_id: referredId,
+      reward_amount: 100000,
+      is_claimed: false,
+    },
+  ])
+
+  if (createError) {
+    console.error("Error creating referral:", createError)
+    return { success: false, message: "Error creating referral" }
+  }
+
+  return { success: true }
+}
+
+export async function getUserReferrals(userId: string) {
+  const supabase = createServerClient()
+
+  // Get referrals where user is the referrer
+  const { data, error } = await supabase
+    .from("referrals")
+    .select(`
+      *,
+      referred:referred_id(id, username)
+    `)
+    .eq("referrer_id", userId)
+
+  if (error) {
+    console.error("Error fetching referrals:", error)
+    return []
+  }
+
+  return data
+}
+
+export async function claimReferralReward(userId: string, referralId: string) {
+  const supabase = createServerClient()
+
+  // Get referral details
+  const { data: referral, error: referralError } = await supabase
+    .from("referrals")
+    .select("*")
+    .eq("id", referralId)
+    .eq("referrer_id", userId)
+    .single()
+
+  if (referralError) {
+    console.error("Error fetching referral:", referralError)
+    return { success: false, message: "Referral not found" }
+  }
+
+  // Check if already claimed
+  if (referral.is_claimed) {
+    return { success: false, message: "Reward already claimed" }
+  }
+
+  // Update referral
+  const { error: updateError } = await supabase
+    .from("referrals")
+    .update({
+      is_claimed: true,
+      claimed_at: new Date().toISOString(),
+    })
+    .eq("id", referralId)
+
+  if (updateError) {
+    console.error("Error claiming referral:", updateError)
+    return { success: false, message: "Error claiming referral" }
+  }
+
+  // Add coins to user
+  await updateUserCoins(userId, referral.reward_amount, "referral_reward", `Claimed referral reward`)
+
+  return { success: true, reward: referral.reward_amount }
+}
+
+// Daily combo system
+export async function createDailyCombo(userId: string) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  // Check if combo already exists for today
+  const { data: existingCombo, error: checkError } = await supabase
+    .from("daily_combo")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("day_date", today)
+    .single()
+
+  if (!checkError && existingCombo) {
+    return existingCombo
+  }
+
+  // Generate 3 random card IDs (using item IDs from 1-10)
+  const cardIds = Array.from({ length: 3 }, () => Math.floor(Math.random() * 10) + 1)
+
+  // Create daily combo
+  const { data, error } = await supabase
+    .from("daily_combo")
+    .insert([
+      {
+        user_id: userId,
+        day_date: today,
+        card_ids: cardIds,
+        found_card_ids: [],
+        reward: 100000,
+        is_completed: false,
+      },
+    ])
+    .select()
+    .single()
+
+  if (error) {
+    console.error("Error creating daily combo:", error)
+    return null
+  }
+
+  return data
+}
+
+export async function getUserDailyCombo(userId: string) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  // Get today's combo
+  const { data, error } = await supabase
+    .from("daily_combo")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("day_date", today)
+    .single()
+
+  if (error) {
+    // If no combo exists for today, create one
+    if (error.code === "PGRST116") {
+      return await createDailyCombo(userId)
+    }
+
+    console.error("Error fetching daily combo:", error)
+    return null
+  }
+
+  return data
+}
+
+export async function findDailyComboCard(userId: string, cardIndex: number) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  // Get today's combo
+  const { data: combo, error: comboError } = await supabase
+    .from("daily_combo")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("day_date", today)
+    .single()
+
+  if (comboError) {
+    console.error("Error fetching daily combo:", comboError)
+    return { success: false, message: "Daily combo not found" }
+  }
+
+  // Check if card index is valid
+  if (cardIndex < 0 || cardIndex >= combo.card_ids.length) {
+    return { success: false, message: "Invalid card index" }
+  }
+
+  // Check if card is already found
+  const cardId = combo.card_ids[cardIndex]
+  if (combo.found_card_ids.includes(cardId)) {
+    return { success: false, message: "Card already found" }
+  }
+
+  // Add card to found cards
+  const newFoundCards = [...combo.found_card_ids, cardId]
+  const isCompleted = newFoundCards.length === combo.card_ids.length
+
+  // Update combo
+  const updateData: any = {
+    found_card_ids: newFoundCards,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (isCompleted) {
+    updateData.is_completed = true
+    updateData.completed_at = new Date().toISOString()
+  }
+
+  const { error: updateError } = await supabase.from("daily_combo").update(updateData).eq("id", combo.id)
+
+  if (updateError) {
+    console.error("Error updating daily combo:", updateError)
+    return { success: false, message: "Error updating daily combo" }
+  }
+
+  // If combo is completed, give reward
+  if (isCompleted) {
+    await updateUserCoins(userId, combo.reward, "daily_combo", "Completed daily combo")
+  }
+
+  return {
+    success: true,
+    cardId,
+    foundCards: newFoundCards,
+    isCompleted,
+    reward: isCompleted ? combo.reward : 0,
+  }
+}
+
+// Hourly earnings
+export async function collectHourlyEarnings(userId: string) {
+  const supabase = createServerClient()
+
+  // Get user details
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("hourly_earn, last_hourly_collect")
+    .eq("id", userId)
+    .single()
+
+  if (userError) {
+    console.error("Error fetching user:", userError)
+    return { success: false, message: "User not found" }
+  }
+
+  const now = new Date()
+  const lastCollect = new Date(user.last_hourly_collect)
+  const hoursPassed = (now.getTime() - lastCollect.getTime()) / (1000 * 60 * 60)
+
+  // Check if at least 1 hour has passed
+  if (hoursPassed < 1) {
+    return {
+      success: false,
+      message: "Not enough time has passed",
+      timeLeft: 60 - Math.floor(hoursPassed * 60),
+    }
+  }
+
+  // Calculate coins to collect (max 24 hours)
+  const hoursToCount = Math.min(hoursPassed, 24)
+  const coinsToCollect = Math.floor(user.hourly_earn * hoursToCount)
+
+  // Update last collect time
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({
+      last_hourly_collect: now.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq("id", userId)
+
+  if (updateError) {
+    console.error("Error updating last collect time:", updateError)
+    return { success: false, message: "Error updating last collect time" }
+  }
+
+  // Add coins to user
+  await updateUserCoins(
+    userId,
+    coinsToCollect,
+    "hourly_earnings",
+    `Collected ${hoursToCount.toFixed(1)} hours of earnings`,
+  )
+
+  return { success: true, coins: coinsToCollect, hours: hoursToCount }
+}
+
+// Reset daily boosts
+export async function resetDailyBoosts() {
+  const supabase = createServerClient()
+
+  // Reset all users' daily rockets and energy_full_used
+  const { error } = await supabase.from("user_boosts").update({
+    daily_rockets: 3,
+    energy_full_used: false,
+    updated_at: new Date().toISOString(),
+  })
+
+  if (error) {
+    console.error("Error resetting daily boosts:", error)
+    return { success: false }
+  }
+
+  return { success: true }
 }
