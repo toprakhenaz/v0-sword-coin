@@ -1,123 +1,108 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback } from "react"
 
-// League data
-const leagueData = [
-  {
-    id: 1,
-    name: "Wooden",
-    threshold: 0,
-    colors: {
-      primary: "#8B4513",
-      secondary: "#A0522D",
-      glow: "#CD853F",
-    },
-  },
-  {
-    id: 2,
-    name: "Bronze",
-    threshold: 10000,
-    colors: {
-      primary: "#CD7F32",
-      secondary: "#B87333",
-      glow: "#D2691E",
-    },
-  },
-  {
-    id: 3,
-    name: "Iron",
-    threshold: 100000,
-    colors: {
-      primary: "#708090",
-      secondary: "#778899",
-      glow: "#B0C4DE",
-    },
-  },
-  {
-    id: 4,
-    name: "Steel",
-    threshold: 1000000,
-    colors: {
-      primary: "#71797E",
-      secondary: "#848884",
-      glow: "#D3D3D3",
-    },
-  },
-  {
-    id: 5,
-    name: "Adamantite",
-    threshold: 10000000,
-    colors: {
-      primary: "#50C878",
-      secondary: "#3CB371",
-      glow: "#7FFFD4",
-    },
-  },
-  {
-    id: 6,
-    name: "Legendary",
-    threshold: 100000000,
-    colors: {
-      primary: "#FFD700",
-      secondary: "#FFA500",
-      glow: "#FFFF00",
-    },
-  },
-  {
-    id: 7,
-    name: "Dragon",
-    threshold: 1000000000,
-    colors: {
-      primary: "#FF4500",
-      secondary: "#FF0000",
-      glow: "#FF7F50",
-    },
-  },
-]
+// League images mapping
+export const ligImage: Record<number, string> = {
+  1: "/leagues/wooden-sword.png",
+  2: "/leagues/bronze-sword.png",
+  3: "/leagues/iron-sword.png",
+  4: "/leagues/steel-sword.png",
+  5: "/leagues/adamantite-sword.png",
+  6: "/leagues/legendary-sword.png",
+  7: "/leagues/dragon-sword.png",
+}
 
-export function useLeagueData() {
-  const [leagues, setLeagues] = useState(leagueData)
+// League colors - primary and secondary colors for each league
+export const leagueColors: Record<number, { primary: string; secondary: string; text: string; glow: string }> = {
+  1: {
+    primary: "#8B4513", // Wooden - Brown
+    secondary: "#A0522D",
+    text: "#FFE0B2",
+    glow: "rgba(139, 69, 19, 0.7)",
+  },
+  2: {
+    primary: "#CD7F32", // Bronze
+    secondary: "#B87333",
+    text: "#FFE0B2",
+    glow: "rgba(205, 127, 50, 0.7)",
+  },
+  3: {
+    primary: "#6D7B8D", // Iron - Silver-blue
+    secondary: "#4F5A6B",
+    text: "#E0E7FF",
+    glow: "rgba(109, 123, 141, 0.7)",
+  },
+  4: {
+    primary: "#71797E", // Steel - Gray
+    secondary: "#43464B",
+    text: "#FFFFFF",
+    glow: "rgba(113, 121, 126, 0.7)",
+  },
+  5: {
+    primary: "#40E0D0", // Adamantite - Turquoise
+    secondary: "#48D1CC",
+    text: "#003366",
+    glow: "rgba(64, 224, 208, 0.7)",
+  },
+  6: {
+    primary: "#FFD700", // Legendary - Gold
+    secondary: "#FFC000",
+    text: "#442C2E",
+    glow: "rgba(255, 215, 0, 0.7)",
+  },
+  7: {
+    primary: "#FF69B4", // Dragon - Pink-red
+    secondary: "#FF1493",
+    text: "#FFFFFF",
+    glow: "rgba(255, 105, 180, 0.7)",
+  },
+}
 
-  // Get league by ID
-  const getLeague = (id: number) => {
-    return leagues.find((league) => league.id === id) || leagues[0]
-  }
+// League coin requirements
+const leagueCoins: Record<number, number> = {
+  1: 1000,
+  2: 10000,
+  3: 100000,
+  4: 1000000,
+  5: 10000000,
+  6: 100000000,
+  7: 1000000000,
+}
 
-  // Get league colors by ID
-  const getLeagueColors = (id: number) => {
-    const league = getLeague(id)
-    return league.colors
-  }
+// League names
+export const leagueNames: Record<number, string> = {
+  1: "Wooden",
+  2: "Bronze",
+  3: "Iron",
+  4: "Steel",
+  5: "Adamantite",
+  6: "Legendary",
+  7: "Dragon",
+}
 
-  // Get league name by ID
-  const getLeagueName = (id: number) => {
-    const league = getLeague(id)
-    return league.name
-  }
+// Custom hook for league data
+export const useLeagueData = () => {
+  const getLeagueImage = useCallback((league: number) => {
+    return ligImage[league] || "/leagues/wooden-sword.png"
+  }, [])
 
-  // Get next league by current league ID
-  const getNextLeague = (id: number) => {
-    const nextId = id + 1
-    return leagues.find((league) => league.id === nextId)
-  }
+  const getLeagueColors = useCallback((league: number) => {
+    return leagueColors[league] || leagueColors[1]
+  }, [])
 
-  // Get league by coins amount
-  const getLeagueByCoins = (coins: number) => {
-    for (let i = leagues.length - 1; i >= 0; i--) {
-      if (coins >= leagues[i].threshold) {
-        return leagues[i]
-      }
-    }
-    return leagues[0]
-  }
+  const getLeagueCoin = useCallback((league: number) => {
+    return leagueCoins[league] || leagueCoins[1]
+  }, [])
+
+  const getLeagueName = useCallback((league: number) => {
+    return leagueNames[league] || leagueNames[1]
+  }, [])
 
   return {
-    leagues,
-    getLeague,
+    getLeagueImage,
     getLeagueColors,
+    getLeagueCoin,
     getLeagueName,
-    getNextLeague,
-    getLeagueByCoins,
   }
 }

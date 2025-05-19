@@ -2,8 +2,6 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
-import { useRouter } from "next/navigation"
-import { useClientAuth, clientLogout } from "@/lib/client-auth"
 import {
   updateUserCoins,
   updateUserEnergy,
@@ -14,6 +12,11 @@ import {
   getUserDailyCombo,
   findDailyComboCard,
 } from "@/lib/db-actions"
+
+// For demo purposes, we'll use a hardcoded user ID
+// In a real Telegram app, you would get this from the Telegram WebApp
+const DEMO_TELEGRAM_ID = "123456789"
+const DEMO_USERNAME = "demo_user"
 
 type UserContextType = {
   userId: string | null
@@ -47,7 +50,7 @@ type UserContextType = {
   refreshUserData: () => Promise<void>
   setLeague: (league: number) => void
   handleTap: () => Promise<void>
-  collectHourlyEarnings: () => Promise<{ success: boolean; coins?: number; message?: string }>
+  collectHourlyEarnings: () => () => Promise<{ success: boolean; coins?: number; message?: string }>
   upgradeBoost: (boostType: string) => Promise<{ success: boolean; message?: string }>
   useRocketBoost: () => {
     result: { success: boolean; message?: string } | null
@@ -62,17 +65,14 @@ type UserContextType = {
     reward?: number
     message?: string
   }>
-  logout: () => Promise<void>
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const router = useRouter()
-  const { isLoading: authLoading, userId: authUserId, telegramId: authTelegramId } = useClientAuth()
   const [userId, setUserId] = useState<string | null>(null)
-  const [telegramId, setTelegramId] = useState<string | null>(null)
-  const [username, setUsername] = useState<string | null>(null)
+  const [telegramId, setTelegramId] = useState<string | null>(DEMO_TELEGRAM_ID)
+  const [username, setUsername] = useState<string | null>(DEMO_USERNAME)
   const [coins, setCoins] = useState(0)
   const [energy, setEnergy] = useState(0)
   const [maxEnergy, setMaxEnergy] = useState(100)
@@ -137,89 +137,134 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Initialize user data when auth is complete
+  // Initialize user data
   useEffect(() => {
     const initUser = async () => {
-      if (authLoading) return
-
-      if (!authUserId) {
-        setIsLoading(false)
-        return
-      }
-
       try {
-        // Set user ID and Telegram ID from authentication
-        setUserId(authUserId)
-        setTelegramId(authTelegramId)
-
-        // Seed the database if needed
+        // First, seed the database if needed
         await fetch("/api/seed")
 
-        // Fetch user data
-        const { data: userData, error: userError } = await supabase
+        // Check if user exists
+        const { data: existingUser } = await supabase
           .from("users")
           .select("*")
-          .eq("id", authUserId)
+          .eq("telegram_id", DEMO_TELEGRAM_ID)
           .single()
 
-        if (userError) {
-          console.error("Error fetching user data:", userError)
-          setIsLoading(false)
-          return
+        if (existingUser) {
+          // User exists, load their data
+          setUserId(existingUser.id)
+          setCoins(existingUser.coins)
+          setEnergy(existingUser.energy)
+          setMaxEnergy(existingUser.max_energy)
+          setEarnPerTap(existingUser.earn_per_tap)
+          setHourlyEarn(existingUser.hourly_earn)
+          setLeagueState(existingUser.league)
+          setLastEnergyUpdate(new Date(existingUser.last_energy_regen))
+
+          // Load user boosts
+          const { data: userBoosts } = await supabase
+            .from("user_boosts")
+            .select("*")
+            .eq("user_id", existingUser.id)
+            .single()
+
+          if (userBoosts) {
+            setBoosts({
+              multiTouch: {
+                level: userBoosts.multi_touch_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
+              },
+              energyLimit: {
+                level: userBoosts.energy_limit_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
+              },
+              chargeSpeed: {
+                level: userBoosts.charge_speed_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
+              },
+              dailyRockets: userBoosts.daily_rockets,
+              maxDailyRockets: userBoosts.max_daily_rockets,
+              energyFullUsed: userBoosts.energy_full_used,
+            })
+          }
+
+          // Load daily combo
+          const dailyComboData = await getUserDailyCombo(existingUser.id)
+          if (dailyComboData) {
+            setDailyCombo({
+              cardIds: dailyComboData.card_ids,
+              foundCardIds: dailyComboData.found_card_ids,
+              reward: dailyComboData.reward,
+              isCompleted: dailyComboData.is_completed,
+            })
+          }
+        } else {
+          // Create new user
+          const { data: newUser } = await supabase
+            .from("users")
+            .insert([
+              {
+                telegram_id: DEMO_TELEGRAM_ID,
+                username: DEMO_USERNAME,
+                coins: 1000,
+                league: 1,
+                hourly_earn: 10,
+                earn_per_tap: 1,
+                energy: 100,
+                max_energy: 100,
+                last_energy_regen: new Date().toISOString(),
+                last_hourly_collect: new Date().toISOString(),
+              },
+            ])
+            .select()
+            .single()
+
+          if (newUser) {
+            setUserId(newUser.id)
+            setCoins(newUser.coins)
+            setEnergy(newUser.energy)
+            setMaxEnergy(newUser.max_energy)
+            setEarnPerTap(newUser.earn_per_tap)
+            setHourlyEarn(newUser.hourly_earn)
+            setLeagueState(newUser.league)
+            setLastEnergyUpdate(new Date())
+
+            // Create initial boosts
+            await supabase.from("user_boosts").insert([
+              {
+                user_id: newUser.id,
+                multi_touch_level: 1,
+                energy_limit_level: 1,
+                charge_speed_level: 1,
+                daily_rockets: 3,
+                max_daily_rockets: 3,
+                energy_full_used: false,
+              },
+            ])
+
+            // Create initial daily combo
+            const dailyComboData = await getUserDailyCombo(newUser.id)
+            if (dailyComboData) {
+              setDailyCombo({
+                cardIds: dailyComboData.card_ids,
+                foundCardIds: dailyComboData.found_card_ids,
+                reward: dailyComboData.reward,
+                isCompleted: dailyComboData.is_completed,
+              })
+            }
+          }
         }
 
-        // Set user data
-        setUsername(userData.username)
-        setCoins(userData.coins)
-        setEnergy(userData.energy)
-        setMaxEnergy(userData.max_energy)
-        setEarnPerTap(userData.earn_per_tap)
-        setHourlyEarn(userData.hourly_earn)
-        setLeagueState(userData.league)
-        setLastEnergyUpdate(new Date(userData.last_energy_regen))
-
-        // Load user boosts
-        const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", authUserId).single()
-
-        if (userBoosts) {
-          setBoosts({
-            multiTouch: {
-              level: userBoosts.multi_touch_level,
-              cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
-            },
-            energyLimit: {
-              level: userBoosts.energy_limit_level,
-              cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
-            },
-            chargeSpeed: {
-              level: userBoosts.charge_speed_level,
-              cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
-            },
-            dailyRockets: userBoosts.daily_rockets,
-            maxDailyRockets: userBoosts.max_daily_rockets,
-            energyFullUsed: userBoosts.energy_full_used,
-          })
-        }
-
-        // Load daily combo
-        const dailyComboData = await getUserDailyCombo(authUserId)
-        if (dailyComboData) {
-          setDailyCombo({
-            cardIds: dailyComboData.card_ids,
-            foundCardIds: dailyComboData.found_card_ids,
-            reward: dailyComboData.reward,
-            isCompleted: dailyComboData.is_completed,
-          })
-        }
+        setIsLoading(false)
       } catch (error) {
         console.error("Error initializing user:", error)
-      } finally {
         setIsLoading(false)
       }
     }
 
     initUser()
-  }, [authLoading, authUserId, authTelegramId])
+  }, [])
 
   // Auto regenerate energy based on time passed
   useEffect(() => {
@@ -456,20 +501,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!userId || isLoadingRocket) return
 
     setIsLoadingRocket(true)
-    try {
-      const boostResult = await useRocketBoost(userId)
-      setResultRocket(boostResult)
+    const boostResult = await useRocketBoost(userId)
+    setResultRocket(boostResult)
+    setIsLoadingRocket(false)
 
-      if (boostResult.success) {
-        // Update local state
-        setBoosts({
-          ...boosts,
-          dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
-        })
-        setEnergy(Math.min(maxEnergy, energy + 500))
-      }
-    } finally {
-      setIsLoadingRocket(false)
+    if (boostResult.success) {
+      // Update local state
+      setBoosts({
+        ...boosts,
+        dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
+      })
+      setEnergy(Math.min(maxEnergy, energy + 500))
     }
   }, [boosts, energy, maxEnergy, userId, isLoadingRocket])
 
@@ -584,12 +626,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return { success: false, message: result.message || "Failed to find combo card" }
   }
 
-  // Logout function
-  const handleLogout = async () => {
-    await clientLogout()
-    router.push("/login")
-  }
-
   return (
     <UserContext.Provider
       value={{
@@ -602,7 +638,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         earnPerTap,
         hourlyEarn,
         league,
-        isLoading: isLoading || authLoading,
+        isLoading,
         isLevelingUp,
         previousLeague,
         dailyCombo,
@@ -617,7 +653,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         useRocketBoost: rocketBoost,
         useFullEnergyBoost: useFullEnergyBoostHandler,
         findComboCard: findComboCardHandler,
-        logout: handleLogout,
       }}
     >
       {children}

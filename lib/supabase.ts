@@ -1,44 +1,18 @@
 import { createClient } from "@supabase/supabase-js"
-import { cookies } from "next/headers"
 
-// Environment variables are already available
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+// Create a single supabase client for the entire application
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Create a singleton instance for client components
-let supabaseInstance: ReturnType<typeof createClient> | null = null
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Client-side Supabase client (singleton pattern)
-export const supabase = (() => {
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
-  }
-  return supabaseInstance
-})()
-
-// Server-side Supabase client
+// Create a server-side client for server components and actions
 export const createServerClient = () => {
-  const cookieStore = cookies()
-
-  return createClient(process.env.SUPABASE_URL || "", process.env.SUPABASE_ANON_KEY || "", {
+  const supabaseUrl = process.env.SUPABASE_URL!
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       persistSession: false,
     },
-    global: {
-      headers: {
-        Cookie: cookieStore.toString(),
-      },
-    },
   })
-}
-
-// For server components and server actions
-export async function createServerSupabaseClient() {
-  "use server"
-  return createServerClient()
 }

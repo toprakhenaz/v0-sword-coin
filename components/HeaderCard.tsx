@@ -4,7 +4,6 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import { useLeagueData } from "@/data/GeneralData"
 import { useUser } from "@/context/UserContext"
-import ProfileSection from "./ProfileSection"
 
 export default function HeaderCard({
   coins,
@@ -41,23 +40,19 @@ export default function HeaderCard({
         <span className="text-white font-bold text-lg">{coins?.toLocaleString()}</span>
       </div>
 
-      <div className="flex items-center space-x-3">
-        <div
-          className="flex items-center rounded-full py-2 px-4 border transition-all hover:shadow-lg"
-          style={{
-            background: `linear-gradient(to right, ${colors.primary}30, ${colors.secondary}30)`,
-            borderColor: `${colors.secondary}60`,
-            boxShadow: `0 2px 8px ${colors.glow}30`,
-          }}
-        >
-          <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
-          <div>
-            <span className="font-medium text-white text-lg">{displayHourlyEarn.toLocaleString()}</span>
-            <span className="text-gray-400 text-xs ml-1">/hour</span>
-          </div>
+      <div
+        className="flex items-center rounded-full py-2 px-4 border transition-all hover:shadow-lg"
+        style={{
+          background: `linear-gradient(to right, ${colors.primary}30, ${colors.secondary}30)`,
+          borderColor: `${colors.secondary}60`,
+          boxShadow: `0 2px 8px ${colors.glow}30`,
+        }}
+      >
+        <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
+        <div>
+          <span className="font-medium text-white text-lg">{displayHourlyEarn.toLocaleString()}</span>
+          <span className="text-gray-400 text-xs ml-1">/hour</span>
         </div>
-
-        <ProfileSection />
       </div>
     </div>
   )
