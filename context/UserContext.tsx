@@ -19,9 +19,12 @@ type UserContextType = {
   hourlyEarn: number
   league: number
   isLoading: boolean
+  isLevelingUp: boolean // Yeni: Seviye atlama animasyonu için
+  previousLeague: number | null // Yeni: Önceki seviyeyi takip etmek için
   updateCoins: (amount: number, transactionType: string, description?: string) => Promise<void>
   updateEnergy: (amount: number) => Promise<void>
   refreshUserData: () => Promise<void>
+  setLeague: (league: number) => void // Yeni: Seviyeyi manuel olarak ayarlamak için
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -35,9 +38,29 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [maxEnergy, setMaxEnergy] = useState(100)
   const [earnPerTap, setEarnPerTap] = useState(1)
   const [hourlyEarn, setHourlyEarn] = useState(0)
-  const [league, setLeague] = useState(1)
+  const [league, setLeagueState] = useState(1)
+  const [previousLeague, setPreviousLeague] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLevelingUp, setIsLevelingUp] = useState(false)
   const [lastEnergyUpdate, setLastEnergyUpdate] = useState<Date>(new Date())
+
+  // Seviyeyi değiştirmek için fonksiyon
+  const setLeague = (newLeague: number) => {
+    if (newLeague !== league) {
+      setPreviousLeague(league)
+      setIsLevelingUp(true)
+
+      // Animasyon için kısa bir gecikme
+      setTimeout(() => {
+        setLeagueState(newLeague)
+
+        // Animasyonu bitir
+        setTimeout(() => {
+          setIsLevelingUp(false)
+        }, 1000)
+      }, 500)
+    }
+  }
 
   // Initialize user data
   useEffect(() => {
@@ -61,7 +84,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setMaxEnergy(existingUser.max_energy)
           setEarnPerTap(existingUser.earn_per_tap)
           setHourlyEarn(existingUser.hourly_earn)
-          setLeague(existingUser.league)
+          setLeagueState(existingUser.league)
           setLastEnergyUpdate(new Date(existingUser.last_energy_regen))
         } else {
           // Create new user
@@ -90,7 +113,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             setMaxEnergy(newUser.max_energy)
             setEarnPerTap(newUser.earn_per_tap)
             setHourlyEarn(newUser.hourly_earn)
-            setLeague(newUser.league)
+            setLeagueState(newUser.league)
             setLastEnergyUpdate(new Date())
 
             // Create initial boosts
@@ -227,8 +250,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Update league if changed
     if (newLeague > league) {
-      setLeague(newLeague)
+      // Seviye atlama animasyonu için
+      setPreviousLeague(league)
+      setIsLevelingUp(true)
 
+      // Veritabanını güncelle
       await supabase
         .from("users")
         .update({
@@ -237,7 +263,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
         })
         .eq("id", userId)
 
-      // TODO: Show league promotion notification
+      // Kısa bir gecikme ile state'i güncelle (animasyon için)
+      setTimeout(() => {
+        setLeagueState(newLeague)
+
+        // Animasyonu bitir
+        setTimeout(() => {
+          setIsLevelingUp(false)
+        }, 1000)
+      }, 500)
     }
   }
 
@@ -250,19 +284,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Only update if energy changed
     if (newEnergy !== energy) {
+      // Update local state immediately for responsive UI
       setEnergy(newEnergy)
       setLastEnergyUpdate(new Date())
 
-      // Update in database
-      await supabase
-        .from("users")
-        .update({
-          energy: newEnergy,
-          last_energy_regen: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
+      // Update in database (don't await this to keep UI responsive)
+      try {
+        await supabase
+          .from("users")
+          .update({
+            energy: newEnergy,
+            last_energy_regen: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId)
+      } catch (error) {
+        console.error("Error updating energy:", error)
+        // Revert local state if database update fails
+        setEnergy(energy)
+      }
+
+      return newEnergy
     }
+
+    return energy
   }
 
   // Refresh user data from database
@@ -277,7 +322,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setMaxEnergy(user.max_energy)
       setEarnPerTap(user.earn_per_tap)
       setHourlyEarn(user.hourly_earn)
-      setLeague(user.league)
+
+      // Eğer lig değiştiyse, animasyonla güncelle
+      if (user.league !== league) {
+        setLeague(user.league)
+      } else {
+        setLeagueState(user.league)
+      }
+
       setLastEnergyUpdate(new Date(user.last_energy_regen))
     }
   }
@@ -295,9 +347,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         hourlyEarn,
         league,
         isLoading,
+        isLevelingUp,
+        previousLeague,
         updateCoins,
         updateEnergy,
         refreshUserData,
+        setLeague,
       }}
     >
       {children}

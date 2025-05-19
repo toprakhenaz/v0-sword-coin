@@ -8,6 +8,7 @@ import CoinDisplay from "@/components/CoinDisplay"
 import EnergyBar from "@/components/EnergyBar"
 import LeagueOverlay from "@/components/LeagueOverlay"
 import BoostOverlay from "@/components/BoostOverlay"
+import LevelUpAnimation from "@/components/LevelUpAnimation"
 import MainPageSkeletonLoading from "@/components/SkeletonMain"
 import Popup from "@/components/Popup"
 import { supabase } from "@/lib/supabase"
@@ -23,9 +24,12 @@ export default function Home() {
     hourlyEarn,
     league,
     isLoading,
+    isLevelingUp,
+    previousLeague,
     updateCoins,
     updateEnergy,
     refreshUserData,
+    setLeague,
   } = useUser()
 
   // Game state
@@ -174,32 +178,30 @@ export default function Home() {
 
   // Game actions
   const handleTap = async () => {
-    if (energy > 0) {
-      // Increase combo counter
-      const newCombo = comboCounter + 1
-      setComboCounter(newCombo)
+    if (energy <= 0) return // Don't proceed if no energy
 
-      // Calculate tap multiplier
-      let multiplier = 1
-      if (newCombo > 50) multiplier = 3
-      else if (newCombo > 25) multiplier = 2
-      else if (newCombo > 10) multiplier = 1.5
+    // Immediately update UI state first for responsive feedback
+    const newCombo = comboCounter + 1
+    setComboCounter(newCombo)
 
-      setTapMultiplier(multiplier)
+    // Calculate tap multiplier
+    let multiplier = 1
+    if (newCombo > 50) multiplier = 3
+    else if (newCombo > 25) multiplier = 2
+    else if (newCombo > 10) multiplier = 1.5
 
-      // Calculate coins to earn
-      const coinsToEarn = Math.round(earnPerTap * multiplier)
+    setTapMultiplier(multiplier)
 
-      // Show tap effect
-      setShowTapEffect(true)
-      setTimeout(() => setShowTapEffect(false), 200)
+    // Calculate coins to earn
+    const coinsToEarn = Math.round(earnPerTap * multiplier)
 
-      // Update coins
-      await updateCoins(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`)
+    // Show tap effect
+    setShowTapEffect(true)
+    setTimeout(() => setShowTapEffect(false), 200)
 
-      // Update energy
-      await updateEnergy(-1)
-    }
+    // Update coins and energy in parallel
+    // We don't need to manually update the energy state here since updateEnergy will handle it
+    await Promise.all([updateCoins(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`), updateEnergy(-1)])
   }
 
   const handleCollectHourlyEarnings = async () => {
@@ -401,12 +403,23 @@ export default function Home() {
     setShowSuccessPopup({ ...showSuccessPopup, show: false })
   }
 
+  // Test için seviye değiştirme fonksiyonu (geliştirme amaçlı)
+  const handleTestLevelChange = () => {
+    const nextLeague = league < 7 ? league + 1 : 1
+    setLeague(nextLeague)
+  }
+
   if (isLoading) {
     return <MainPageSkeletonLoading />
   }
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+      {/* Seviye atlama animasyonu */}
+      {isLevelingUp && previousLeague && (
+        <LevelUpAnimation previousLeague={previousLeague} newLeague={league} onComplete={() => {}} />
+      )}
+
       {/* Main content */}
       <div className="flex flex-col min-h-screen px-4 pb-20 max-w-md mx-auto">
         {/* Header section */}
@@ -440,7 +453,7 @@ export default function Home() {
         </div>
 
         {/* Energy bar section */}
-        <div className="mb-20 mt-4">
+        <div className="mb-20">
           <EnergyBar
             energy={energy}
             maxEnergy={maxEnergy}
@@ -449,6 +462,14 @@ export default function Home() {
             league={league}
           />
         </div>
+
+        {/* Test butonu - geliştirme amaçlı */}
+        <button
+          onClick={handleTestLevelChange}
+          className="fixed bottom-24 right-4 bg-gray-800 text-white px-3 py-1 rounded-full text-xs opacity-50 hover:opacity-100"
+        >
+          Test: Seviye Değiştir
+        </button>
       </div>
 
       {/* Overlays */}

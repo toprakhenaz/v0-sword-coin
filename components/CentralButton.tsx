@@ -37,6 +37,9 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
   }, [])
 
   const handleButtonPress = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // If we're already showing effects, don't trigger again too quickly
+    if (showRipple) return
+
     // Calculate ripple position relative to button
     const button = e.currentTarget
     const rect = button.getBoundingClientRect()
@@ -69,6 +72,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     setFloatingNumbers((prev) => [...prev, ...newNumbers])
     setNextId(nextId + numCount)
 
+    // Call the onClick handler passed from parent
     onClick()
 
     // Automatically reset pressed state after animation
@@ -86,6 +90,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
         style={{
           background: `radial-gradient(circle, ${colors.secondary}80, ${colors.primary}20)`,
           animationDuration: "3s",
+          transition: "background 0.5s ease",
         }}
       ></div>
       <div
@@ -94,6 +99,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           animationDelay: "1.5s",
           animationDuration: "2.5s",
           background: `radial-gradient(circle, ${colors.secondary}60, ${colors.primary}10)`,
+          transition: "background 0.5s ease",
         }}
       ></div>
 
@@ -115,6 +121,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
               boxShadow: `0 0 10px ${colors.glow}`,
               animationDuration: `${2 + (i % 3)}s`,
               zIndex: 5,
+              transition: "background 0.5s ease, box-shadow 0.5s ease",
             }}
           />
         )
@@ -157,7 +164,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          transition: "all 0.3s ease",
+          transition: "all 0.3s ease, background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease",
           transform: isPressed ? "scale(0.9)" : "scale(1)",
         }}
       >
@@ -182,6 +189,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           style={{
             background: `radial-gradient(circle, ${colors.secondary}30, transparent 70%)`,
             opacity: isPressed ? 0.8 : 0.5,
+            transition: "background 0.5s ease",
           }}
         />
 
@@ -202,6 +210,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
             style={{
               filter: `drop-shadow(0 0 10px ${colors.glow})`,
               animationDuration: "3s",
+              transition: "filter 0.5s ease",
             }}
           />
         </div>

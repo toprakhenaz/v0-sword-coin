@@ -28,10 +28,10 @@ export const leagueColors: Record<number, { primary: string; secondary: string; 
     glow: "rgba(205, 127, 50, 0.7)",
   },
   3: {
-    primary: "#A19D94", // Iron - Silver-gray
-    secondary: "#71797E",
-    text: "#FFFFFF",
-    glow: "rgba(161, 157, 148, 0.7)",
+    primary: "#6D7B8D", // Iron - Silver-blue
+    secondary: "#4F5A6B",
+    text: "#E0E7FF",
+    glow: "rgba(109, 123, 141, 0.7)",
   },
   4: {
     primary: "#71797E", // Steel - Gray

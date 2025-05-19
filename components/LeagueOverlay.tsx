@@ -13,7 +13,7 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
   const [animateLeague, setAnimateLeague] = useState(false)
   const [isLeaderboardCollapsed, setIsLeaderboardCollapsed] = useState(false)
   const totalLeagues = 7
-  const sliderRef = useRef<HTMLDivElement>(null)
+  const leaderboardRef = useRef<HTMLDivElement>(null)
   const { getLeagueImage, getLeagueColors, getLeagueCoin, getLeagueName } = useLeagueData()
   const totalNeeded = getLeagueCoin(currentLeague)
   const colors = getLeagueColors(currentLeague)
@@ -40,7 +40,7 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
   }
 
   const handleSliderScroll = (direction: "up" | "down") => {
-    const slider = sliderRef.current
+    const slider = leaderboardRef.current
     if (slider) {
       const scrollAmount = direction === "up" ? -100 : 100
       slider.scrollBy({ top: scrollAmount, behavior: "smooth" })
@@ -70,16 +70,16 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
         <FontAwesomeIcon icon={icons.times} size="lg" />
       </button>
 
-      <div className="relative w-full max-w-md mx-auto h-full max-h-[800px] flex flex-col px-6 py-8">
+      <div className="relative w-full max-w-md mx-auto h-full max-h-screen flex flex-col px-6 py-8 overflow-hidden">
         {/* Header */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-4">
           <h2 className="text-3xl font-bold text-white mb-1">League Rankings</h2>
           <div className="text-gray-400">Climb the ranks to earn more rewards</div>
         </div>
 
         {/* League Image and Navigation */}
-        <div className="flex-1 flex flex-col items-center justify-center mb-8">
-          <div className="flex items-center justify-center w-full mb-6">
+        <div className="flex-shrink-0 flex flex-col items-center justify-center mb-4">
+          <div className="flex items-center justify-center w-full mb-4">
             <button
               onClick={handlePrevLeague}
               className="h-12 w-12 rounded-full bg-gray-800 bg-opacity-70 text-white transition-all duration-300 hover:bg-opacity-100 flex items-center justify-center mr-6"
@@ -95,7 +95,7 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
                 className={`relative transition-all duration-500 ${animateLeague ? "scale-100 opacity-100" : "scale-90 opacity-0"}`}
               >
                 <div
-                  className="relative z-10 flex h-40 w-40 items-center justify-center rounded-full"
+                  className="relative z-10 flex h-32 w-32 items-center justify-center rounded-full"
                   style={{
                     background: `radial-gradient(circle, ${colors.secondary}40, ${colors.primary}80)`,
                     boxShadow: `0 0 30px ${colors.glow}`,
@@ -105,8 +105,8 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
                   <Image
                     src={getLeagueImage(currentLeague) || "/placeholder.svg"}
                     alt={`League ${currentLeague}`}
-                    width={120}
-                    height={120}
+                    width={100}
+                    height={100}
                     className="object-contain transition-all duration-500"
                     style={{ filter: `drop-shadow(0 0 8px ${colors.glow})` }}
                   />
@@ -138,7 +138,7 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
         </div>
 
         {/* Progress Section */}
-        <div className="mb-6">
+        <div className="flex-shrink-0 mb-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-gray-400">Your Progress</div>
             <div className="flex items-center text-lg font-bold">
@@ -180,7 +180,7 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
         </div>
 
         {/* Leaderboard Section - Collapsible */}
-        <div className="bg-gray-800 bg-opacity-30 rounded-lg p-4 border border-gray-700">
+        <div className="bg-gray-800 bg-opacity-30 rounded-lg p-4 border border-gray-700 flex-1 min-h-0 flex flex-col">
           <div className="mb-2 flex items-center justify-between cursor-pointer" onClick={toggleLeaderboard}>
             <h3 className="text-xl font-bold text-white">Top Players</h3>
             <div className="flex">
@@ -206,17 +206,16 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
           </div>
 
           <div
-            className={`relative overflow-hidden transition-all duration-500 ${
-              isLeaderboardCollapsed ? "max-h-0" : "max-h-[300px]"
+            className={`relative overflow-hidden transition-all duration-500 flex-1 min-h-0 ${
+              isLeaderboardCollapsed ? "max-h-0" : "max-h-full"
             }`}
           >
             <div
-              ref={sliderRef}
-              className="overflow-y-auto scrollbar-hide"
+              ref={leaderboardRef}
+              className="overflow-y-auto scrollbar-hide h-full"
               style={{
                 scrollSnapType: "y mandatory",
                 scrollBehavior: "smooth",
-                maxHeight: "300px",
               }}
             >
               {leaderboardData[currentLeague]?.map((user, index) => (
