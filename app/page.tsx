@@ -194,7 +194,8 @@ export default function Home() {
 
     // Calculate tap multiplier
     let multiplier = 1
-    if (newCombo > 50) multiplier = 3
+    if (newCombo > 50)
+      multiplier = 3 // This ensures the max multiplier is 3x
     else if (newCombo > 25) multiplier = 2
     else if (newCombo > 10) multiplier = 1.5
 
@@ -444,7 +445,7 @@ export default function Home() {
           <div className="my-2 text-center">
             <span className="text-sm font-bold text-yellow-400">
               {comboCounter}x Combo
-              {tapMultiplier > 1 && <span className="ml-2 text-green-400">({tapMultiplier}x Multiplier)</span>}
+              {tapMultiplier > 1 && <span className="ml-2 text-yellow-400">({tapMultiplier}x Multiplier)</span>}
             </span>
           </div>
         )}

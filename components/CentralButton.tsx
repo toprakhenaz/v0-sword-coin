@@ -206,10 +206,9 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
             width={180}
             height={180}
             priority
-            className="drop-shadow-lg animate-pulse"
+            className="drop-shadow-lg"
             style={{
               filter: `drop-shadow(0 0 10px ${colors.glow})`,
-              animationDuration: "3s",
               transition: "filter 0.5s ease",
             }}
           />
