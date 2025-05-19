@@ -38,16 +38,26 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     return () => clearInterval(timer)
   }, [])
 
-  // Update the floating numbers logic to only show one symbol per click
-  const handleButtonPress = (e: React.MouseEvent<HTMLButtonElement>) => {
+  // Handle button press with touch and click support
+  const handleButtonPress = (e: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
     // If we're already showing effects, don't trigger again too quickly
     if (showRipple) return
+
+    // Prevent default for touch events to avoid scrolling
+    if ("touches" in e) {
+      e.preventDefault()
+    }
 
     // Calculate ripple position relative to button
     const button = e.currentTarget
     const rect = button.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+
+    // Handle both mouse and touch events
+    const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX
+    const clientY = "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY
+
+    const x = clientX - rect.left
+    const y = clientY - rect.top
 
     setRipplePosition({ x, y })
     setShowRipple(true)
@@ -56,21 +66,30 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     // Call the onClick handler passed from parent
     onClick()
 
-    // Create just one floating number
-    const angle = Math.random() * Math.PI * 2
-    const distance = 20 + Math.random() * 40
-    const newNumber = {
-      id: nextId,
-      value: earnPerTap, // Use earnPerTap directly from context
-      x: 50 + Math.cos(angle) * distance, // percentage from center
-      y: 50 + Math.sin(angle) * distance, // percentage from center
-      opacity: 1,
-      scale: 1,
-      rotation: 0,
+    // Create multiple floating numbers for visual effect
+    const numberOfFloatingNumbers = Math.min(3, Math.max(1, Math.floor(earnPerTap / 10)))
+
+    for (let i = 0; i < numberOfFloatingNumbers; i++) {
+      const angle = Math.random() * Math.PI * 2
+      const distance = 20 + Math.random() * 40
+      const delay = i * 100 // Stagger the appearance
+
+      setTimeout(() => {
+        const newNumber = {
+          id: nextId + i,
+          value: earnPerTap,
+          x: 50 + Math.cos(angle) * distance,
+          y: 50 + Math.sin(angle) * distance,
+          opacity: 1,
+          scale: 1,
+          rotation: -15 + Math.random() * 30,
+        }
+
+        setFloatingNumbers((prev) => [...prev, newNumber])
+      }, delay)
     }
 
-    setFloatingNumbers([...floatingNumbers, newNumber])
-    setNextId(nextId + 1)
+    setNextId(nextId + numberOfFloatingNumbers)
 
     // Automatically reset pressed state after animation
     setTimeout(() => {
@@ -149,6 +168,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
       <button
         className="relative overflow-hidden z-10 outline-none focus:outline-none"
         onClick={handleButtonPress}
+        onTouchStart={handleButtonPress}
         style={{
           width: "14rem",
           height: "14rem",
@@ -165,6 +185,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           transform: isPressed ? "scale(0.9)" : "scale(1)",
           outline: "none",
           borderColor: colors.secondary,
+          WebkitTapHighlightColor: "transparent", // Remove tap highlight on mobile
         }}
       >
         {/* Ripple effect */}

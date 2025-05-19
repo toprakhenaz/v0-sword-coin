@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Navbar from "@/components/Navbar"
 import Header from "@/components/Header"
 import CentralButton from "@/components/CentralButton"
@@ -13,6 +13,54 @@ import MainPageSkeletonLoading from "@/components/SkeletonMain"
 import Popup from "@/components/Popup"
 import { supabase } from "@/lib/supabase"
 import { useUser } from "@/context/UserContext"
+
+// Telegram WebApp integration
+declare global {
+  interface Window {
+    Telegram: {
+      WebApp: {
+        ready: () => void
+        expand: () => void
+        close: () => void
+        sendData: (data: string) => void
+        onEvent: (eventType: string, eventHandler: Function) => void
+        offEvent: (eventType: string, eventHandler: Function) => void
+        MainButton: {
+          text: string
+          color: string
+          textColor: string
+          isVisible: boolean
+          isActive: boolean
+          isProgressVisible: boolean
+          setText: (text: string) => void
+          onClick: (callback: Function) => void
+          show: () => void
+          hide: () => void
+          enable: () => void
+          disable: () => void
+          showProgress: (leaveActive: boolean) => void
+          hideProgress: () => void
+        }
+        BackButton: {
+          isVisible: boolean
+          onClick: (callback: Function) => void
+          show: () => void
+          hide: () => void
+        }
+        initData: string
+        initDataUnsafe: {
+          user?: {
+            id: number
+            first_name: string
+            last_name?: string
+            username?: string
+            language_code: string
+          }
+        }
+      }
+    }
+  }
+}
 
 export default function Home() {
   const {
@@ -30,6 +78,7 @@ export default function Home() {
     updateEnergy,
     refreshUserData,
     setLeague,
+    handleTap,
   } = useUser()
 
   // Game state
@@ -37,7 +86,8 @@ export default function Home() {
   const [lastHourlyCollectTime, setLastHourlyCollectTime] = useState<number | null>(null)
   const [showHourlyPopup, setShowHourlyPopup] = useState(false)
   const [hourlyCoinsToCollect, setHourlyCoinsToCollect] = useState(0)
-  const [tapMultiplier, setTapMultiplier] = useState(1) // For combo multiplier effects
+  const [tapMultiplier, setTapMultiplier] = useState(1)
+  const tapAreaRef = useRef<HTMLDivElement>(null)
 
   // Boost state
   const [dailyRockets, setDailyRockets] = useState(3)
@@ -67,6 +117,21 @@ export default function Home() {
     message: "",
     image: "",
   })
+
+  // Initialize Telegram WebApp
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.Telegram) {
+      // Tell Telegram WebApp that we are ready
+      window.Telegram.WebApp.ready()
+
+      // Expand the WebApp to take the full screen
+      window.Telegram.WebApp.expand()
+
+      // Set up main button if needed for special actions
+      // window.Telegram.WebApp.MainButton.setText('Collect Bonus')
+      // window.Telegram.WebApp.MainButton.show()
+    }
+  }, [])
 
   // Load boost data on init
   useEffect(() => {
@@ -124,7 +189,6 @@ export default function Home() {
 
   // Hourly earnings system
   useEffect(() => {
-    // Check if we need to initialize the last collect time
     if (lastHourlyCollectTime === null && userId) {
       const fetchLastCollectTime = async () => {
         const { data: user } = await supabase.from("users").select("last_hourly_collect").eq("id", userId).single()
@@ -176,41 +240,40 @@ export default function Home() {
     }
   }, [comboCounter])
 
-  // Component mount olduğunda ligi 7'ye ayarla
+  // Touch event handlers for mobile optimization
   useEffect(() => {
-    // Component mount olduğunda ligi 7'ye ayarla
-    if (league !== 7) {
-      setLeague(7)
+    const tapArea = tapAreaRef.current
+    if (!tapArea) return
+
+    const handleTouch = (e: TouchEvent) => {
+      e.preventDefault()
+
+      // Update combo counter for rapid taps
+      const newCombo = comboCounter + 1
+      setComboCounter(newCombo)
+
+      // Calculate tap multiplier based on combo
+      let multiplier = 1
+      if (newCombo > 50) multiplier = 3
+      else if (newCombo > 25) multiplier = 2
+      else if (newCombo > 10) multiplier = 1.5
+
+      setTapMultiplier(multiplier)
+
+      // Show tap effect
+      setShowTapEffect(true)
+      setTimeout(() => setShowTapEffect(false), 200)
+
+      // Trigger the tap function
+      handleTap()
     }
-  }, []) // Boş dependency array ile sadece bir kez çalışacak
 
-  // Game actions
-  const handleTap = async () => {
-    if (energy <= 0) return // Don't proceed if no energy
+    tapArea.addEventListener("touchstart", handleTouch, { passive: false })
 
-    // Immediately update UI state first for responsive feedback
-    const newCombo = comboCounter + 1
-    setComboCounter(newCombo)
-
-    // Calculate tap multiplier
-    let multiplier = 1
-    if (newCombo > 50)
-      multiplier = 3 // This ensures the max multiplier is 3x
-    else if (newCombo > 25) multiplier = 2
-    else if (newCombo > 10) multiplier = 1.5
-
-    setTapMultiplier(multiplier)
-
-    // Calculate coins to earn
-    const coinsToEarn = Math.round(earnPerTap * multiplier)
-
-    // Show tap effect
-    setShowTapEffect(true)
-    setTimeout(() => setShowTapEffect(false), 200)
-
-    // Update coins and energy in parallel
-    await Promise.all([updateCoins(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`), updateEnergy(-1)])
-  }
+    return () => {
+      tapArea.removeEventListener("touchstart", handleTouch)
+    }
+  }, [comboCounter, handleTap])
 
   const handleCollectHourlyEarnings = async () => {
     if (userId) {
@@ -411,12 +474,6 @@ export default function Home() {
     setShowSuccessPopup({ ...showSuccessPopup, show: false })
   }
 
-  // Test için seviye değiştirme fonksiyonu (geliştirme amaçlı)
-  const handleTestLevelChange = () => {
-    const nextLeague = league < 7 ? league + 1 : 1
-    setLeague(nextLeague)
-  }
-
   if (isLoading) {
     return <MainPageSkeletonLoading />
   }
@@ -451,7 +508,7 @@ export default function Home() {
         )}
 
         {/* Central button section - main focus */}
-        <div className="flex-grow flex items-center justify-center py-8 relative">
+        <div className="flex-grow flex items-center justify-center py-8 relative" ref={tapAreaRef}>
           {showTapEffect && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="w-52 h-52 bg-yellow-500 rounded-full animate-pulse opacity-10"></div>
@@ -470,14 +527,6 @@ export default function Home() {
             league={league}
           />
         </div>
-
-        {/* Test butonu - geliştirme amaçlı */}
-        <button
-          onClick={handleTestLevelChange}
-          className="fixed bottom-24 right-4 bg-gray-800 text-white px-3 py-1 rounded-full text-xs opacity-50 hover:opacity-100"
-        >
-          Test: Seviye Değiştir
-        </button>
       </div>
 
       {/* Overlays */}

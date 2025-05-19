@@ -357,3 +357,97 @@ body {
     outline-offset: 2px;
   }
 }
+
+/* Telegram WebApp specific styles */
+:root {
+  --tg-theme-bg-color: #111827;
+  --tg-theme-text-color: #ffffff;
+  --tg-theme-hint-color: #a0aec0;
+  --tg-theme-link-color: #3b82f6;
+  --tg-theme-button-color: #4f46e5;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-secondary-bg-color: #1f2937;
+}
+
+/* Apply Telegram theme variables when in WebApp */
+body.telegram-theme {
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+}
+
+/* Optimize touch handling for mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Smoother animations on mobile */
+@media (pointer: coarse) {
+  .animate-ripple {
+    animation-duration: 0.3s;
+  }
+
+  .animate-pulse {
+    animation-duration: 2s;
+  }
+}
+
+/* Optimize for mobile touch targets */
+button,
+.central-button,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Safe area for iOS devices in Telegram */
+.ios-safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Enhanced tap feedback */
+@keyframes tap-feedback {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tap-feedback:active {
+  animation: tap-feedback 0.2s ease-out;
+}
+
+/* Improved floating numbers effect */
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) scale(0.5) rotate(var(--rotation, 0deg));
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-100px) scale(1.2) rotate(var(--rotation, 0deg));
+    opacity: 0;
+  }
+}
+
+/* Optimized ripple effect for mobile */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}

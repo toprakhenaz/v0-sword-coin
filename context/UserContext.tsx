@@ -13,6 +13,26 @@ import {
   findDailyComboCard,
 } from "@/lib/db-actions"
 
+// Telegram WebApp integration
+declare global {
+  interface Window {
+    Telegram: {
+      WebApp: {
+        initData: string
+        initDataUnsafe: {
+          user?: {
+            id: number
+            first_name: string
+            last_name?: string
+            username?: string
+            language_code: string
+          }
+        }
+      }
+    }
+  }
+}
+
 // For demo purposes, we'll use a hardcoded user ID
 // In a real Telegram app, you would get this from the Telegram WebApp
 const DEMO_TELEGRAM_ID = "123456789"
@@ -144,11 +164,32 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // First, seed the database if needed
         await fetch("/api/seed")
 
+        // Get user ID from Telegram WebApp
+        let telegramUserId = null
+        let telegramUsername = null
+
+        if (typeof window !== "undefined" && window.Telegram && window.Telegram.WebApp.initDataUnsafe.user) {
+          telegramUserId = window.Telegram.WebApp.initDataUnsafe.user.id.toString()
+          telegramUsername =
+            window.Telegram.WebApp.initDataUnsafe.user.username ||
+            `${window.Telegram.WebApp.initDataUnsafe.user.first_name || ""} ${window.Telegram.WebApp.initDataUnsafe.user.last_name || ""}`.trim()
+        }
+
+        // Fallback for development testing
+        if (!telegramUserId) {
+          telegramUserId = "123456789"
+          telegramUsername = "dev_user"
+          console.warn("Using development Telegram user ID and username")
+        }
+
+        setTelegramId(telegramUserId)
+        setUsername(telegramUsername)
+
         // Check if user exists
         const { data: existingUser } = await supabase
           .from("users")
           .select("*")
-          .eq("telegram_id", DEMO_TELEGRAM_ID)
+          .eq("telegram_id", telegramUserId)
           .single()
 
         if (existingUser) {
@@ -205,8 +246,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
             .from("users")
             .insert([
               {
-                telegram_id: DEMO_TELEGRAM_ID,
-                username: DEMO_USERNAME,
+                telegram_id: telegramUserId,
+                username: telegramUsername,
                 coins: 1000,
                 league: 1,
                 hourly_earn: 10,
@@ -501,27 +542,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!userId || isLoadingRocket) return
 
     setIsLoadingRocket(true)
-    const boostResult = await useRocketBoost(userId)
-    setResultRocket(boostResult)
-    setIsLoadingRocket(false)
+    try {
+      const boostResult = await useRocketBoost(userId)
+      setResultRocket(boostResult)
 
-    if (boostResult.success) {
-      // Update local state
-      setBoosts({
-        ...boosts,
-        dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
-      })
-      setEnergy(Math.min(maxEnergy, energy + 500))
+      if (boostResult.success) {
+        // Update local state
+        setBoosts({
+          ...boosts,
+          dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
+        })
+        setEnergy(Math.min(maxEnergy, energy + 500))
+      }
+    } finally {
+      setIsLoadingRocket(false)
     }
   }, [boosts, energy, maxEnergy, userId, isLoadingRocket])
 
-  const rocketBoost = () => {
+  const rocketBoost = useCallback(() => {
     return {
       result: resultRocket,
       isLoading: isLoadingRocket,
       handleRocketBoost,
     }
-  }
+  }, [resultRocket, isLoadingRocket, handleRocketBoost])
 
   const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
 

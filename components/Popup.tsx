@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useEffect, useState } from "react"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
@@ -31,11 +33,17 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
       }
     }
 
+    // Auto close after 5 seconds
+    const autoCloseTimer = setTimeout(() => {
+      handleClose()
+    }, 5000)
+
     window.addEventListener("keydown", handleEsc)
 
     return () => {
       window.removeEventListener("keydown", handleEsc)
       clearTimeout(timer)
+      clearTimeout(autoCloseTimer)
     }
   }, [])
 
@@ -45,11 +53,18 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
     setTimeout(onClose, 300)
   }
 
+  // Handle touch events
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.preventDefault()
+    handleClose()
+  }
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 transition-all duration-300 backdrop-blur-sm"
       style={{ opacity: isVisible ? 1 : 0 }}
       onClick={handleClose}
+      onTouchEnd={handleTouchEnd}
     >
       <div
         className="rounded-2xl p-6 shadow-2xl relative w-[90%] max-w-sm text-center transform transition-transform duration-300"
@@ -60,6 +75,7 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
           transform: isVisible ? "scale(1) translateY(0)" : "scale(0.9) translateY(20px)",
         }}
         onClick={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
       >
         <button
           onClick={handleClose}
@@ -123,7 +139,7 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
 
         <button
           onClick={handleClose}
-          className="w-full py-3 px-4 text-white font-bold rounded-lg transition-all duration-300 shadow-lg transform hover:scale-105 active:scale-95"
+          className="w-full py-3 px-4 text-white font-bold rounded-lg transition-all duration-300 shadow-lg transform hover:scale-105 active:scale-95 tap-feedback"
           style={{
             background: `linear-gradient(to right, ${colors.secondary}, ${colors.primary})`,
             boxShadow: `0 4px 12px ${colors.glow}, 0 2px 6px rgba(0, 0, 0, 0.3)`,

@@ -27,8 +27,27 @@ export default function Navbar() {
     }
   }, [pathname, prevPath])
 
+  // For Telegram WebApp, we need to consider safe area at the bottom
+  const [bottomPadding, setBottomPadding] = useState("4")
+
+  useEffect(() => {
+    // Check if we're in Telegram WebApp
+    if (typeof window !== "undefined" && window.Telegram && window.Telegram.WebApp) {
+      // Add extra padding for Telegram safe area on iOS
+      // This is a workaround as viewportStable parameter doesn't always work
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+      const isIOS =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+
+      if (isIOS || isSafari) {
+        setBottomPadding("8")
+      }
+    }
+  }, [])
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-4">
+    <div className={`fixed bottom-0 left-0 right-0 z-40 px-4 pb-${bottomPadding}`}>
       <div
         className={`flex justify-between rounded-2xl p-3 bg-[#1A1E2E]/90 backdrop-blur-sm border border-gray-800/30 transition-all duration-500 ${
           isTransitioning ? "opacity-70 transform scale-98" : "opacity-100 transform scale-100"
