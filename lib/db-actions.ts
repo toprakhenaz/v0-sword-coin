@@ -75,85 +75,202 @@ export async function getOrCreateUser(telegramId: string, username: string) {
 export async function updateUserCoins(userId: string, amount: number, transactionType: string, description?: string) {
   const supabase = createServerClient()
 
-  // Start a transaction
-  const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
+  try {
+    // Get current coins first
+    const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
 
-  if (userError) {
-    console.error("Error fetching user:", userError)
+    if (userError) {
+      // Check if it's a rate limit error
+      if (userError.message && userError.message.includes("Too Many Requests")) {
+        console.warn("Rate limit reached when fetching user coins. Returning null.")
+        return null
+      }
+      console.error("Error fetching user:", userError)
+      return null
+    }
+
+    const newCoins = user.coins + amount
+
+    // Update user coins
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ coins: newCoins, updated_at: new Date().toISOString() })
+      .eq("id", userId)
+
+    if (updateError) {
+      // Check if it's a rate limit error
+      if (updateError.message && updateError.message.includes("Too Many Requests")) {
+        console.warn("Rate limit reached when updating coins. Returning calculated value.")
+        return newCoins // Return the calculated value without updating the database
+      }
+      console.error("Error updating user coins:", updateError)
+      return null
+    }
+
+    // Log transaction - but don't fail if this doesn't work
+    try {
+      await supabase.from("transactions").insert([
+        {
+          user_id: userId,
+          amount,
+          transaction_type: transactionType,
+          description,
+        },
+      ])
+    } catch (transactionError) {
+      console.error("Error logging transaction:", transactionError)
+      // Continue anyway - the transaction log is less important than the coin update
+    }
+
+    return newCoins
+  } catch (error) {
+    // Handle JSON parsing errors which might occur with rate limiting
+    if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
+      console.warn("Rate limit reached when updating coins. Using calculated value.")
+      // We don't know the current coins, so we can't calculate the new value
+      return null
+    }
+
+    console.error("Error in updateUserCoins:", error)
     return null
   }
-
-  const newCoins = user.coins + amount
-
-  // Update user coins
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({ coins: newCoins, updated_at: new Date().toISOString() })
-    .eq("id", userId)
-
-  if (updateError) {
-    console.error("Error updating user coins:", updateError)
-    return null
-  }
-
-  // Log transaction
-  const { error: transactionError } = await supabase.from("transactions").insert([
-    {
-      user_id: userId,
-      amount,
-      transaction_type: transactionType,
-      description,
-    },
-  ])
-
-  if (transactionError) {
-    console.error("Error logging transaction:", transactionError)
-  }
-
-  return newCoins
 }
 
 // Item related actions
 export async function getUserItems(userId: string) {
   const supabase = createServerClient()
-  const { data, error } = await supabase
-    .from("user_items")
-    .select(`
-      *,
-      items (*)
-    `)
-    .eq("user_id", userId)
+  try {
+    const { data, error } = await supabase
+      .from("user_items")
+      .select(`
+        *,
+        items (*)
+      `)
+      .eq("user_id", userId)
 
-  if (error) {
-    console.error("Error fetching user items:", error)
+    if (error) {
+      console.error("Error fetching user items:", error)
+      return []
+    }
+
+    return data
+  } catch (error) {
+    console.error("Error in getUserItems:", error)
     return []
   }
+}
 
-  return data
+// Calculate and update user's total hourly earn
+export async function updateUserHourlyEarn(userId: string) {
+  const supabase = createServerClient()
+
+  try {
+    // Get all user items
+    const { data: userItems, error: itemsError } = await supabase
+      .from("user_items")
+      .select("hourly_income")
+      .eq("user_id", userId)
+
+    if (itemsError) {
+      console.error("Error fetching user items:", itemsError)
+      return 0
+    }
+
+    // Calculate total hourly earn
+    const totalHourlyEarn = userItems.reduce((total, item) => total + item.hourly_income, 0)
+
+    // Update user
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ hourly_earn: totalHourlyEarn, updated_at: new Date().toISOString() })
+      .eq("id", userId)
+
+    if (updateError) {
+      console.error("Error updating hourly earn:", updateError)
+    }
+
+    return totalHourlyEarn
+  } catch (error) {
+    console.error("Error in updateUserHourlyEarn:", error)
+    return 0
+  }
 }
 
 export async function upgradeItem(userId: string, itemId: number) {
   const supabase = createServerClient()
 
-  // Get user and item details
-  const { data: userItem, error: itemError } = await supabase
-    .from("user_items")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("item_id", itemId)
-    .single()
+  try {
+    // Get user and item details
+    const { data: userItem, error: itemError } = await supabase
+      .from("user_items")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("item_id", itemId)
+      .single()
 
-  // If user doesn't have this item yet, create it
-  if (itemError) {
-    // Get base item details
-    const { data: baseItem, error: baseItemError } = await supabase.from("items").select("*").eq("id", itemId).single()
+    // If user doesn't have this item yet, create it
+    if (itemError) {
+      // Get base item details
+      const { data: baseItem, error: baseItemError } = await supabase
+        .from("items")
+        .select("*")
+        .eq("id", itemId)
+        .single()
 
-    if (baseItemError) {
-      console.error("Error fetching base item:", baseItemError)
-      return { success: false, message: "Item not found" }
+      if (baseItemError) {
+        console.error("Error fetching base item:", baseItemError)
+        return { success: false, message: "Item not found" }
+      }
+
+      // Get user coins
+      const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
+
+      if (userError) {
+        console.error("Error fetching user:", userError)
+        return { success: false, message: "User not found" }
+      }
+
+      // Check if user has enough coins
+      if (user.coins < baseItem.base_upgrade_cost) {
+        return { success: false, message: "Not enough coins" }
+      }
+
+      // Create user item
+      const { data: newUserItem, error: createError } = await supabase
+        .from("user_items")
+        .insert([
+          {
+            user_id: userId,
+            item_id: itemId,
+            level: 1,
+            hourly_income: baseItem.base_hourly_income,
+            upgrade_cost: baseItem.base_upgrade_cost,
+          },
+        ])
+        .select()
+        .single()
+
+      if (createError) {
+        console.error("Error creating user item:", createError)
+        return { success: false, message: "Error creating item" }
+      }
+
+      // Deduct coins from user
+      await updateUserCoins(userId, -baseItem.base_upgrade_cost, "item_purchase", `Purchased item ${itemId}`)
+
+      // Update user hourly earn
+      const newHourlyEarn = await updateUserHourlyEarn(userId)
+
+      return {
+        success: true,
+        level: 1,
+        hourlyIncome: baseItem.base_hourly_income,
+        upgradeCost: baseItem.base_upgrade_cost * 2,
+        hourlyEarn: newHourlyEarn,
+      }
     }
 
-    // Get user coins
+    // User already has this item, upgrade it
     const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
 
     if (userError) {
@@ -162,121 +279,53 @@ export async function upgradeItem(userId: string, itemId: number) {
     }
 
     // Check if user has enough coins
-    if (user.coins < baseItem.base_upgrade_cost) {
+    if (user.coins < userItem.upgrade_cost) {
       return { success: false, message: "Not enough coins" }
     }
 
-    // Create user item
-    const { data: newUserItem, error: createError } = await supabase
-      .from("user_items")
-      .insert([
-        {
-          user_id: userId,
-          item_id: itemId,
-          level: 1,
-          hourly_income: baseItem.base_hourly_income,
-          upgrade_cost: baseItem.base_upgrade_cost,
-        },
-      ])
-      .select()
-      .single()
+    // Calculate new values
+    const newLevel = userItem.level + 1
+    const newHourlyIncome = Math.floor(userItem.hourly_income * 1.5)
+    const newUpgradeCost = Math.floor(userItem.upgrade_cost * 2)
 
-    if (createError) {
-      console.error("Error creating user item:", createError)
-      return { success: false, message: "Error creating item" }
+    // Update user item
+    const { error: updateError } = await supabase
+      .from("user_items")
+      .update({
+        level: newLevel,
+        hourly_income: newHourlyIncome,
+        upgrade_cost: newUpgradeCost,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userItem.id)
+
+    if (updateError) {
+      console.error("Error upgrading item:", updateError)
+      return { success: false, message: "Error upgrading item" }
     }
 
     // Deduct coins from user
-    await updateUserCoins(userId, -baseItem.base_upgrade_cost, "item_purchase", `Purchased item ${itemId}`)
+    await updateUserCoins(
+      userId,
+      -userItem.upgrade_cost,
+      "item_upgrade",
+      `Upgraded item ${itemId} to level ${newLevel}`,
+    )
 
-    // Update user hourly earn
-    await updateUserHourlyEarn(userId)
+    // Update user hourly earn and return the new value
+    const newHourlyEarn = await updateUserHourlyEarn(userId)
 
     return {
       success: true,
-      level: 1,
-      hourlyIncome: baseItem.base_hourly_income,
-      upgradeCost: baseItem.base_upgrade_cost * 2,
-    }
-  }
-
-  // User already has this item, upgrade it
-  const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
-
-  if (userError) {
-    console.error("Error fetching user:", userError)
-    return { success: false, message: "User not found" }
-  }
-
-  // Check if user has enough coins
-  if (user.coins < userItem.upgrade_cost) {
-    return { success: false, message: "Not enough coins" }
-  }
-
-  // Calculate new values
-  const newLevel = userItem.level + 1
-  const newHourlyIncome = Math.floor(userItem.hourly_income * 1.5)
-  const newUpgradeCost = Math.floor(userItem.upgrade_cost * 2)
-
-  // Update user item
-  const { error: updateError } = await supabase
-    .from("user_items")
-    .update({
       level: newLevel,
-      hourly_income: newHourlyIncome,
-      upgrade_cost: newUpgradeCost,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userItem.id)
-
-  if (updateError) {
-    console.error("Error upgrading item:", updateError)
-    return { success: false, message: "Error upgrading item" }
+      hourlyIncome: newHourlyIncome,
+      upgradeCost: newUpgradeCost,
+      hourlyEarn: newHourlyEarn,
+    }
+  } catch (error) {
+    console.error("Error in upgradeItem:", error)
+    return { success: false, message: "An error occurred while upgrading the item" }
   }
-
-  // Deduct coins from user
-  await updateUserCoins(userId, -userItem.upgrade_cost, "item_upgrade", `Upgraded item ${itemId} to level ${newLevel}`)
-
-  // Update user hourly earn
-  await updateUserHourlyEarn(userId)
-
-  return {
-    success: true,
-    level: newLevel,
-    hourlyIncome: newHourlyIncome,
-    upgradeCost: newUpgradeCost,
-  }
-}
-
-// Calculate and update user's total hourly earn
-export async function updateUserHourlyEarn(userId: string) {
-  const supabase = createServerClient()
-
-  // Get all user items
-  const { data: userItems, error: itemsError } = await supabase
-    .from("user_items")
-    .select("hourly_income")
-    .eq("user_id", userId)
-
-  if (itemsError) {
-    console.error("Error fetching user items:", itemsError)
-    return 0
-  }
-
-  // Calculate total hourly earn
-  const totalHourlyEarn = userItems.reduce((total, item) => total + item.hourly_income, 0)
-
-  // Update user
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({ hourly_earn: totalHourlyEarn, updated_at: new Date().toISOString() })
-    .eq("id", userId)
-
-  if (updateError) {
-    console.error("Error updating hourly earn:", updateError)
-  }
-
-  return totalHourlyEarn
 }
 
 // Task related actions
@@ -484,37 +533,60 @@ export async function claimDailyReward(userId: string, day: number) {
 export async function updateUserEnergy(userId: string, amount: number) {
   const supabase = createServerClient()
 
-  // Get user details
-  const { data: user, error: userError } = await supabase
-    .from("users")
-    .select("energy, max_energy")
-    .eq("id", userId)
-    .single()
+  try {
+    // Get user details
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("energy, max_energy")
+      .eq("id", userId)
+      .single()
 
-  if (userError) {
-    console.error("Error fetching user:", userError)
+    if (userError) {
+      // Check if it's a rate limit error
+      if (userError.message && userError.message.includes("Too Many Requests")) {
+        console.warn("Rate limit reached when fetching user energy. Returning null.")
+        return null
+      }
+      console.error("Error fetching user:", userError)
+      return null
+    }
+
+    // Calculate new energy (ensure it doesn't go below 0 or above max)
+    const newEnergy = Math.max(0, Math.min(user.max_energy, user.energy + amount))
+
+    // Update user energy
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({
+        energy: newEnergy,
+        last_energy_regen: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+
+    if (updateError) {
+      // Check if it's a rate limit error
+      if (updateError.message && updateError.message.includes("Too Many Requests")) {
+        console.warn("Rate limit reached when updating energy. Using local value instead.")
+        return newEnergy // Return the calculated value without updating the database
+      }
+
+      console.error("Error updating user energy:", updateError)
+      return null
+    }
+
+    return newEnergy
+  } catch (error) {
+    // Handle JSON parsing errors which might occur with rate limiting
+    if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
+      console.warn("Rate limit reached when updating energy. Using local value instead.")
+      // Return a best-guess value since we couldn't update the database
+      return null
+    }
+
+    console.error("Error in updateUserEnergy:", error)
     return null
   }
-
-  // Calculate new energy (ensure it doesn't go below 0 or above max)
-  const newEnergy = Math.max(0, Math.min(user.max_energy, user.energy + amount))
-
-  // Update user energy
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({
-      energy: newEnergy,
-      last_energy_regen: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId)
-
-  if (updateError) {
-    console.error("Error updating user energy:", updateError)
-    return null
-  }
-
-  return newEnergy
 }
 
 // Boost related actions
@@ -933,7 +1005,7 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
   return {
     success: true,
     cardId,
-    foundCards: newFoundCards,
+    foundCardIds: newFoundCards,
     isCompleted,
     reward: isCompleted ? combo.reward : 0,
   }

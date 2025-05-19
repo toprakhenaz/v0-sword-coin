@@ -341,6 +341,7 @@ export default function MinePage() {
     [activeCategory],
   )
 
+  // Handle upgrade action
   const handleUpgradeClick = useCallback(
     (card: CardItem) => {
       if (coins < card.upgradeCost) return
@@ -432,11 +433,13 @@ export default function MinePage() {
         return updatedCards
       })
 
-      // Refresh user data in context
+      // Refresh user data in context to update hourly earnings
       await refreshUserData()
 
       // Show success popup
-      setSuccessMessage(`${selectedCard.name} is now level ${newLevel}!`)
+      setSuccessMessage(
+        `${selectedCard.name} is now level ${newLevel}! Hourly income increased to ${hourlyEarn + newHourlyIncome - selectedCard.hourlyIncome}/hour.`,
+      )
       setSelectedCard(null)
       setShowSuccessPopup(true)
     } catch (error) {
@@ -444,7 +447,7 @@ export default function MinePage() {
     } finally {
       setUpgradeInProgress(false)
     }
-  }, [userId, selectedCard, upgradeInProgress, coins, updateCoins, refreshUserData])
+  }, [userId, selectedCard, upgradeInProgress, coins, updateCoins, refreshUserData, hourlyEarn])
 
   const toggleSortOptions = useCallback(() => {
     setShowSortOptions((prev) => !prev)

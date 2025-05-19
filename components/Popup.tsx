@@ -1,11 +1,11 @@
 "use client"
 
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import { useLeagueData } from "@/data/GeneralData"
+import { X } from "lucide-react"
 
 interface PopupProps {
   title: string
@@ -59,6 +59,16 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
     handleClose()
   }
 
+  // Get appropriate icon for the popup
+  const getPopupIcon = () => {
+    if (title.toLowerCase().includes("task started")) return icons.play
+    if (title.toLowerCase().includes("completed")) return icons.check
+    if (title.toLowerCase().includes("reward") || title.toLowerCase().includes("earning")) return icons.coins
+    if (title.toLowerCase().includes("level")) return icons.levelUp
+    if (title.toLowerCase().includes("boost")) return icons.rocket
+    return icons.bell
+  }
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 transition-all duration-300 backdrop-blur-sm"
@@ -67,113 +77,63 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
       onTouchEnd={handleTouchEnd}
     >
       <div
-        className="rounded-2xl p-6 shadow-2xl relative w-[90%] max-w-sm text-center transform transition-transform duration-300"
+        className="rounded-2xl overflow-hidden relative w-[90%] max-w-sm transform transition-transform duration-300 bg-gray-900"
         style={{
-          background: `linear-gradient(135deg, ${colors.primary}90, ${colors.secondary}70)`,
-          border: `2px solid ${colors.secondary}`,
-          boxShadow: `0 15px 30px -10px rgba(0, 0, 0, 0.6), 0 8px 20px -6px rgba(0, 0, 0, 0.4), 0 0 15px ${colors.glow}`,
+          boxShadow: `0 15px 30px -10px rgba(0, 0, 0, 0.6), 0 8px 20px -6px rgba(0, 0, 0, 0.4)`,
           transform: isVisible ? "scale(1) translateY(0)" : "scale(0.9) translateY(20px)",
         }}
         onClick={(e) => e.stopPropagation()}
         onTouchEnd={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={handleClose}
-          className="absolute top-3 right-3 w-8 h-8 bg-gray-800/70 hover:bg-gray-700 rounded-full flex items-center justify-center transition-colors duration-300 text-gray-300 hover:text-white"
-        >
-          <FontAwesomeIcon icon={icons.times} />
-        </button>
-
-        <div className="mb-2 mx-auto w-20 h-1 bg-white/20 rounded-full"></div>
-
-        <h2
-          className="text-2xl font-bold mb-3 relative inline-block"
+        {/* Header */}
+        <div
+          className="p-4 text-center relative"
           style={{
-            color: colors.text,
-            textShadow: `0 2px 10px ${colors.glow}`,
+            background: `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})`,
           }}
         >
-          {title}
-          <span
-            className="absolute left-0 right-0 h-0.5 bottom-0 rounded-full"
-            style={{
-              background: `linear-gradient(90deg, transparent, ${colors.secondary}, transparent)`,
-              boxShadow: `0 0 8px ${colors.glow}`,
-            }}
-          ></span>
-        </h2>
-        <p className="mb-6 text-gray-100">{message}</p>
+          <button
+            onClick={handleClose}
+            className="absolute top-3 right-3 w-8 h-8 bg-gray-800/40 hover:bg-gray-700/60 rounded-full flex items-center justify-center transition-colors duration-300 text-gray-300 hover:text-white"
+          >
+            <X size={16} />
+          </button>
 
-        <div className="relative mb-6 p-3">
-          <div
-            className="absolute inset-0 rounded-xl opacity-30 animate-pulse"
-            style={{
-              background: `radial-gradient(circle, ${colors.secondary}60, transparent 70%)`,
-              animationDuration: "2s",
-            }}
-          ></div>
-          {image === "/coin.png" ? (
-            <div className="flex flex-col items-center justify-center">
-              <FontAwesomeIcon
-                icon={icons.coins}
-                className="text-yellow-300 text-6xl mb-2 animate-pulse"
-                style={{
-                  animationDuration: "3s",
-                  filter: `drop-shadow(0 0 10px ${colors.glow})`,
-                }}
-              />
-              <div className="text-2xl font-bold text-yellow-300">+{message.match(/\d[\d,.]*\s*coins/)?.[0] || ""}</div>
-            </div>
-          ) : (
-            <img
-              src={image || "/placeholder.svg"}
-              alt="Popup Image"
-              className="mx-auto w-36 h-36 object-contain relative z-10 animate-pulse"
-              style={{
-                animationDuration: "3s",
-                filter: `drop-shadow(0 0 10px ${colors.glow})`,
-              }}
-            />
-          )}
+          <h2 className="text-xl font-bold text-white">{title}</h2>
         </div>
 
-        <button
-          onClick={handleClose}
-          className="w-full py-3 px-4 text-white font-bold rounded-lg transition-all duration-300 shadow-lg transform hover:scale-105 active:scale-95 tap-feedback"
-          style={{
-            background: `linear-gradient(to right, ${colors.secondary}, ${colors.primary})`,
-            boxShadow: `0 4px 12px ${colors.glow}, 0 2px 6px rgba(0, 0, 0, 0.3)`,
-          }}
-        >
-          Awesome!
-        </button>
+        {/* Content */}
+        <div className="p-6 bg-gray-800">
+          <div className="flex items-center mb-4">
+            {image === "/coin.png" ? (
+              <div className="w-12 h-12 rounded-full bg-yellow-500 flex items-center justify-center mr-4">
+                <FontAwesomeIcon icon={icons.coins} className="text-white text-xl" />
+              </div>
+            ) : (
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center mr-4"
+                style={{
+                  background: `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})`,
+                }}
+              >
+                <FontAwesomeIcon icon={getPopupIcon()} className="text-white text-xl" />
+              </div>
+            )}
 
-        {/* Floating particles */}
-        {[...Array(15)].map((_, i) => {
-          const size = 2 + Math.random() * 4
-          const angle = Math.random() * Math.PI * 2
-          const distance = 30 + Math.random() * 100
-          const duration = 3 + Math.random() * 5
-          const delay = Math.random() * 2
+            <p className="text-white text-base flex-1">{message}</p>
+          </div>
 
-          return (
-            <div
-              key={i}
-              className="absolute rounded-full animate-pulse"
-              style={{
-                width: `${size}px`,
-                height: `${size}px`,
-                left: `calc(50% + ${Math.cos(angle) * distance}px)`,
-                top: `calc(50% + ${Math.sin(angle) * distance}px)`,
-                background: i % 2 === 0 ? colors.primary : colors.secondary,
-                boxShadow: `0 0 5px ${colors.glow}`,
-                animationDuration: `${duration}s`,
-                animationDelay: `${delay}s`,
-                opacity: 0.3 + Math.random() * 0.4,
-              }}
-            />
-          )
-        })}
+          <button
+            onClick={handleClose}
+            className="w-full py-3 px-4 text-white font-bold rounded-lg transition-all duration-300 shadow-lg transform hover:scale-105 active:scale-95 tap-feedback"
+            style={{
+              background: `linear-gradient(to right, ${colors.primary}, ${colors.secondary})`,
+              boxShadow: `0 4px 12px ${colors.glow}40, 0 2px 6px rgba(0, 0, 0, 0.3)`,
+            }}
+          >
+            Awesome!
+          </button>
+        </div>
       </div>
     </div>
   )

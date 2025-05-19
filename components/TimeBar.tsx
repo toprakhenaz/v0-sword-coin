@@ -6,11 +6,13 @@ import { icons } from "@/icons"
 import type { TimerBarProps } from "@/types"
 import { getCardImage } from "@/data/cardData"
 import { useLeagueData } from "@/data/GeneralData"
+import { useUser } from "@/context/UserContext"
 
 export default function TimerBar({ dailyCombo, foundCards }: TimerBarProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0)
   const [isFlipped, setIsFlipped] = useState<boolean[]>([false, false, false])
   const { getLeagueColors } = useLeagueData()
+  const { findComboCard } = useUser()
   const colors = getLeagueColors(6) // Use league 6 colors for the timer bar
 
   useEffect(() => {
@@ -31,10 +33,22 @@ export default function TimerBar({ dailyCombo, foundCards }: TimerBarProps) {
   }, [])
 
   // Flip animation for cards
-  const toggleCardFlip = (index: number) => {
-    const newIsFlipped = [...isFlipped]
-    newIsFlipped[index] = !newIsFlipped[index]
-    setIsFlipped(newIsFlipped)
+  const toggleCardFlip = async (index: number) => {
+    if (foundCards.includes(dailyCombo[index])) {
+      // Card already found, just toggle flip animation
+      const newIsFlipped = [...isFlipped]
+      newIsFlipped[index] = !newIsFlipped[index]
+      setIsFlipped(newIsFlipped)
+    } else {
+      // Find the card in the combo
+      const result = await findComboCard(index)
+      if (result.success) {
+        // Show flip animation
+        const newIsFlipped = [...isFlipped]
+        newIsFlipped[index] = true
+        setIsFlipped(newIsFlipped)
+      }
+    }
   }
 
   const formatTime = (seconds: number): string => {

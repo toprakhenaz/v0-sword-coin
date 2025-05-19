@@ -1,9 +1,9 @@
 "use client"
 
+import { motion } from "framer-motion"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
-import { motion } from "framer-motion"
-import Image from "next/image"
+import { ChevronRight } from "lucide-react"
 
 interface TaskCardProps {
   title: string
@@ -26,71 +26,64 @@ export default function TaskCard({
   isCompleted,
   onClick,
 }: TaskCardProps) {
+  // Get platform icon and color
+  const getPlatformStyle = () => {
+    switch (platform.toLowerCase()) {
+      case "youtube":
+        return { bgColor: "#FF0000", icon: icons.youtube }
+      case "twitter":
+        return { bgColor: "#000000", icon: icons.twitter }
+      case "telegram":
+        return { bgColor: "#0088cc", icon: icons.telegram }
+      case "instagram":
+        return { bgColor: "#E1306C", icon: icons.instagram }
+      case "facebook":
+        return { bgColor: "#1877F2", icon: icons.facebook }
+      case "linkedin":
+        return { bgColor: "#0077B5", icon: icons.linkedin }
+      case "binance":
+        return { bgColor: "#F0B90B", icon: icons.coins }
+      case "swordcoin":
+        return { bgColor: "#6366F1", icon: icons.sword }
+      default:
+        return { bgColor: "#6366F1", icon: icons.globe }
+    }
+  }
+
+  const platformStyle = getPlatformStyle()
+
   return (
     <motion.div
-      className={`bg-gray-800/70 rounded-xl overflow-hidden h-full border border-gray-700/50 ${
-        isCompleted ? "opacity-70" : ""
-      }`}
+      className={`bg-gray-800/90 rounded-xl overflow-hidden ${isCompleted ? "opacity-70" : ""}`}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
+      onClick={onClick}
     >
-      <div className="p-4 flex flex-col h-full">
-        <div className="flex items-start">
-          <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 mr-3 bg-gray-700/50 flex items-center justify-center">
-            <Image
-              src={platformLogo || "/placeholder.svg"}
-              alt={platform}
-              width={36}
-              height={36}
-              className="object-contain"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-start">
-              <h3 className="font-bold text-white text-sm truncate">{title}</h3>
-              <div className="flex items-center ml-2 flex-shrink-0">
-                <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-xs" />
-                <span className="text-yellow-300 font-bold text-sm">{reward}</span>
-              </div>
-            </div>
-            <p className="text-gray-300 text-xs line-clamp-2 mt-1">{description}</p>
+      <div className="p-4 flex items-center">
+        {/* Platform icon - no frame, just the icon with background */}
+        <div
+          className="w-12 h-12 rounded-full flex-shrink-0 mr-4 flex items-center justify-center"
+          style={{ backgroundColor: platformStyle.bgColor }}
+        >
+          <FontAwesomeIcon icon={platformStyle.icon} className="text-white text-xl" />
+        </div>
+
+        {/* Task content */}
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-medium mb-1">{description}</p>
+
+          {/* Reward */}
+          <div className="flex items-center">
+            <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-xs" />
+            <span className="text-yellow-300 font-bold text-sm">+{reward.toLocaleString()}</span>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="mt-3 relative h-1.5 bg-gray-700/70 rounded-full overflow-hidden">
-          <div
-            className="absolute h-full left-0 top-0 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
-            style={{ width: `${progress}%` }}
-          >
-            {/* Animated shine effect */}
-            <div className="absolute inset-0 opacity-30">
-              <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-white to-transparent skew-x-12 animate-shine"></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-between items-center mt-auto pt-3">
-          <div className="text-xs text-gray-400">
-            <span className="text-gray-300 font-medium">{platform}</span> • {progress}% complete
-          </div>
-          <button
-            onClick={onClick}
-            className={`px-3 py-1 rounded-full text-xs font-medium ${
-              isCompleted
-                ? "bg-gray-600 text-gray-300"
-                : progress === 100
-                  ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white"
-                  : "bg-gradient-to-r from-blue-500 to-indigo-600 text-white"
-            }`}
-            disabled={isCompleted}
-          >
-            {isCompleted ? "Completed" : progress === 100 ? "Claim" : "Start"}
-          </button>
-        </div>
+        {/* Right arrow */}
+        <ChevronRight className="text-gray-400 ml-2 flex-shrink-0" size={20} />
       </div>
     </motion.div>
   )

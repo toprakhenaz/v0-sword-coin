@@ -8,10 +8,10 @@ import RefferanceRow from "@/components/RefferanceRow"
 import { Alert, AlertTitle, AlertDescription } from "@/components/Alert"
 import { Button } from "@/components/Button"
 import Modal from "@/components/Modal"
+import { useUser } from "@/context/UserContext"
 
 export default function FriendsPage() {
-  const [coins, setCoins] = useState(24161)
-  const [league, setLeague] = useState(6)
+  const { coins, league } = useUser()
   const [showModal, setShowModal] = useState(false)
   const [showAlert, setShowAlert] = useState(false)
   const [collectingId, setCollectingId] = useState<string | null>(null)
@@ -45,7 +45,7 @@ export default function FriendsPage() {
 
       const referral = referrals.find((ref) => ref.referencedId === id)
       if (referral) {
-        setCoins(coins + referral.referenceAmount)
+        // We're now using the UserContext to manage coins, so we don't need to update local state
       }
 
       setCollectingId(null)
@@ -64,13 +64,13 @@ export default function FriendsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-4 pb-24">
+    <main className="min-h-screen bg-[#111827] text-white pb-24">
       <HeaderCard coins={coins} league={league} />
 
       <Friends length={referrals.length} />
 
       {showAlert && (
-        <div className="mb-4">
+        <div className="px-4 mb-4">
           <Alert isGreen>
             <AlertTitle>Success!</AlertTitle>
             <AlertDescription>Your referral reward has been successfully collected.</AlertDescription>
@@ -78,13 +78,13 @@ export default function FriendsPage() {
         </div>
       )}
 
-      <div className="mb-6">
+      <div className="px-4 mb-6">
         <Button className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white" onClick={copyReferralLink}>
           Copy Referral Link
         </Button>
       </div>
 
-      <div className="space-y-4">
+      <div className="px-4 space-y-4">
         <h2 className="text-xl font-bold">My Referrals</h2>
         {referrals.map((referance) => (
           <RefferanceRow

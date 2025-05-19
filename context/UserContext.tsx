@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
+import { createContext, useContext, useState, useEffect, type ReactNode, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import {
   updateUserCoins,
@@ -119,6 +119,29 @@ export function UserProvider({ children }: { children: ReactNode }) {
     maxDailyRockets: 3,
     energyFullUsed: false,
   })
+
+  // Rocket boost states
+  const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
+  const [isLoadingRocket, setIsLoadingRocket] = useState(false)
+
+  // Full energy boost state
+  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
+  const [fullEnergyBoostResult, setFullEnergyBoostResult] = useState<{ success: boolean; message?: string } | null>(
+    null,
+  )
+
+  // Debounce and rate limiting
+  const energyUpdateQueue = useRef<number>(0)
+  const isUpdatingEnergy = useRef<boolean>(false)
+  const energyUpdateTimer = useRef<NodeJS.Timeout | null>(null)
+
+  // Coin update queue and debouncing
+  const coinUpdateQueue = useRef<{ amount: number; transactionType: string; description?: string }[]>([])
+  const isUpdatingCoins = useRef<boolean>(false)
+  const coinUpdateTimer = useRef<NodeJS.Timeout | null>(null)
+
+  const lastTapTime = useRef<number>(0)
+  const tapCooldown = 300 // ms between taps to prevent too many requests (increased from 200ms)
 
   // Seviyeyi değiştirmek için fonksiyon
   const setLeague = (newLeague: number) => {
@@ -307,6 +330,42 @@ export function UserProvider({ children }: { children: ReactNode }) {
     initUser()
   }, [])
 
+  // Add this effect to ensure hourly earnings are properly tracked and updated
+  useEffect(() => {
+    const calculateHourlyEarningsForCards = async () => {
+      if (!userId) return
+
+      try {
+        // Get all user items
+        const { data: userItems } = await supabase.from("user_items").select("hourly_income").eq("user_id", userId)
+
+        if (userItems) {
+          const calculatedHourlyEarn = userItems.reduce((total, item) => total + item.hourly_income, 0)
+
+          // Update the state if different
+          if (calculatedHourlyEarn !== hourlyEarn) {
+            setHourlyEarn(calculatedHourlyEarn)
+
+            // Update in the database if needed
+            await supabase
+              .from("users")
+              .update({
+                hourly_earn: calculatedHourlyEarn,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", userId)
+          }
+        }
+      } catch (error) {
+        console.error("Error calculating hourly earnings:", error)
+      }
+    }
+
+    if (userId) {
+      calculateHourlyEarningsForCards()
+    }
+  }, [userId, hourlyEarn])
+
   // Auto regenerate energy based on time passed
   useEffect(() => {
     // Calculate energy to regenerate based on time passed since last update
@@ -324,7 +383,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setEnergy(newEnergy)
         setLastEnergyUpdate(now)
 
-        // Update in database
+        // Update in database - but don't wait for it to complete
         supabase
           .from("users")
           .update({
@@ -342,35 +401,151 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, energy, maxEnergy, lastEnergyUpdate, boosts.chargeSpeed.level])
 
+  // Process energy update queue with debouncing
+  const processEnergyUpdateQueue = useCallback(async () => {
+    if (!userId || isUpdatingEnergy.current || energyUpdateQueue.current === 0) return
+
+    isUpdatingEnergy.current = true
+    try {
+      const amount = energyUpdateQueue.current
+      energyUpdateQueue.current = 0 // Reset the queue
+
+      // Calculate new energy locally
+      const newEnergy = Math.max(0, Math.min(maxEnergy, energy + amount))
+
+      // Only update if energy changed
+      if (newEnergy !== energy) {
+        // Update local state immediately
+        setEnergy(newEnergy)
+        setLastEnergyUpdate(new Date())
+
+        try {
+          // Try to update in database
+          const result = await updateUserEnergy(userId, amount)
+
+          // If we got a null result but no error was thrown, it means we hit rate limiting
+          // In this case, we'll keep our local value and try to sync later
+          if (result === null) {
+            console.warn("Energy update may have been rate limited. Using local value.")
+
+            // Schedule a sync attempt for later
+            setTimeout(() => {
+              supabase
+                .from("users")
+                .update({
+                  energy: newEnergy,
+                  last_energy_regen: new Date().toISOString(),
+                })
+                .eq("id", userId)
+                .then(() => console.log("Delayed energy sync successful"))
+                .catch((err) => console.error("Delayed energy sync failed:", err))
+            }, 5000) // Try again in 5 seconds
+          }
+        } catch (error) {
+          console.error("Error updating energy:", error)
+          // We'll keep the local state as is since we've already updated it
+        }
+      }
+    } finally {
+      isUpdatingEnergy.current = false
+    }
+  }, [userId, energy, maxEnergy])
+
+  // Process coin update queue with debouncing
+  const processCoinUpdateQueue = useCallback(async () => {
+    if (!userId || isUpdatingCoins.current || coinUpdateQueue.current.length === 0) return
+
+    isUpdatingCoins.current = true
+    try {
+      // Take the first item from the queue
+      const updateItem = coinUpdateQueue.current.shift()
+      if (!updateItem) return
+
+      const { amount, transactionType, description } = updateItem
+
+      try {
+        // Try to update in database
+        const result = await updateUserCoins(userId, amount, transactionType, description)
+
+        // If we got a null result but no error was thrown, it means we hit rate limiting
+        if (result === null) {
+          console.warn("Coin update may have been rate limited. Using local value.")
+
+          // Schedule a sync attempt for later
+          setTimeout(() => {
+            supabase
+              .from("users")
+              .select("coins")
+              .eq("id", userId)
+              .single()
+              .then(({ data }) => {
+                if (data) {
+                  setCoins(data.coins)
+                  console.log("Delayed coin sync successful")
+                }
+              })
+              .catch((err) => console.error("Delayed coin sync failed:", err))
+          }, 5000) // Try again in 5 seconds
+        }
+      } catch (error) {
+        console.error("Error updating coins:", error)
+        // We'll keep the local state as is since we've already updated it
+      }
+
+      // Process the next item in the queue if there are more
+      if (coinUpdateQueue.current.length > 0) {
+        setTimeout(() => {
+          processCoinUpdateQueue()
+        }, 500) // Process next item after a delay
+      }
+    } finally {
+      isUpdatingCoins.current = false
+    }
+  }, [userId])
+
+  // Set up the debounced energy update processor
+  useEffect(() => {
+    const processQueueInterval = setInterval(() => {
+      if (energyUpdateQueue.current !== 0) {
+        processEnergyUpdateQueue()
+      }
+
+      if (coinUpdateQueue.current.length > 0 && !isUpdatingCoins.current) {
+        processCoinUpdateQueue()
+      }
+    }, 1000) // Process queues every second
+
+    return () => clearInterval(processQueueInterval)
+  }, [processEnergyUpdateQueue, processCoinUpdateQueue])
+
   // Energy regeneration timer
   const updateEnergyHandler = useCallback(
     async (amount: number) => {
       if (!userId) return
 
-      // Calculate new energy (ensure it doesn't go below 0 or above max)
+      // Add to the queue instead of updating immediately
+      energyUpdateQueue.current += amount
+
+      // Calculate new energy locally for immediate feedback
       const newEnergy = Math.max(0, Math.min(maxEnergy, energy + amount))
 
-      // Only update if energy changed
-      if (newEnergy !== energy) {
-        // Update local state immediately for responsive UI
-        setEnergy(newEnergy)
-        setLastEnergyUpdate(new Date())
+      // Update local state immediately for responsive UI
+      setEnergy(newEnergy)
+      setLastEnergyUpdate(new Date())
 
-        // Update in database (don't await this to keep UI responsive)
-        try {
-          await updateUserEnergy(userId, amount)
-        } catch (error) {
-          console.error("Error updating energy:", error)
-          // Revert local state if database update fails
-          setEnergy(energy)
-        }
-
-        return newEnergy
+      // Clear any existing timer
+      if (energyUpdateTimer.current) {
+        clearTimeout(energyUpdateTimer.current)
       }
 
-      return energy
+      // Set a new timer to process the queue after a delay
+      energyUpdateTimer.current = setTimeout(() => {
+        processEnergyUpdateQueue()
+      }, 500) // 500ms debounce
+
+      return newEnergy
     },
-    [userId, energy, maxEnergy],
+    [userId, energy, maxEnergy, processEnergyUpdateQueue],
   )
 
   useEffect(() => {
@@ -381,14 +556,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const regenTime = 60000 / chargeMultiplier // Adjust regen time based on charge speed
 
       energyInterval = setInterval(() => {
-        updateEnergyHandler(1)
+        // Add to queue instead of updating immediately
+        energyUpdateQueue.current += 1
+
+        // Update local state immediately
+        setEnergy((prev) => Math.min(maxEnergy, prev + 1))
+        setLastEnergyUpdate(new Date())
+
+        // Process queue less frequently
+        if (Math.random() < 0.2) {
+          // Only process about 20% of the time
+          processEnergyUpdateQueue()
+        }
       }, regenTime) // Adjusted time
     }
 
     return () => {
       if (energyInterval) clearInterval(energyInterval)
     }
-  }, [userId, energy, maxEnergy, boosts.chargeSpeed.level, updateEnergyHandler])
+  }, [userId, energy, maxEnergy, boosts.chargeSpeed.level, processEnergyUpdateQueue])
 
   // Combo system
   useEffect(() => {
@@ -402,16 +588,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [comboCounter])
 
-  // Update coins in state and database
+  // Update coins in state and database with debouncing
   const updateCoinsHandler = async (amount: number, transactionType: string, description?: string) => {
     if (!userId) return
 
-    // Update local state
+    // Update local state immediately for responsive UI
     const newCoins = coins + amount
     setCoins(newCoins)
 
-    // Update in database
-    await updateUserCoins(userId, amount, transactionType, description)
+    // Add to the queue instead of updating immediately
+    coinUpdateQueue.current.push({ amount, transactionType, description })
+
+    // Clear any existing timer
+    if (coinUpdateTimer.current) {
+      clearTimeout(coinUpdateTimer.current)
+    }
+
+    // Set a new timer to process the queue after a delay
+    coinUpdateTimer.current = setTimeout(() => {
+      processCoinUpdateQueue()
+    }, 500) // 500ms debounce
 
     // Check if user should be promoted to next league
     if (amount > 0) {
@@ -449,9 +645,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Handle tap action
+  // Handle tap action with rate limiting
   const handleTap = async () => {
     if (energy <= 0) return // Don't proceed if no energy
+
+    // Implement tap rate limiting
+    const now = Date.now()
+    if (now - lastTapTime.current < tapCooldown) {
+      console.log("Tapping too fast, ignoring tap")
+      return
+    }
+    lastTapTime.current = now
 
     // Immediately update UI state first for responsive feedback
     const newCombo = comboCounter + 1
@@ -469,11 +673,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     // Calculate coins to earn
     const coinsToEarn = Math.round(earnPerTap * multiplier)
 
-    // Update coins and energy in parallel
-    await Promise.all([
-      updateCoinsHandler(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`),
-      updateEnergyHandler(-1),
-    ])
+    // Update coins through the queue system
+    await updateCoinsHandler(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`)
+
+    // Update energy through the queue system
+    await updateEnergyHandler(-1)
   }
 
   // Collect hourly earnings
@@ -535,9 +739,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   // Use rocket boost
-  const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
-  const [isLoadingRocket, setIsLoadingRocket] = useState(false)
-
   const handleRocketBoost = useCallback(async () => {
     if (!userId || isLoadingRocket) return
 
@@ -567,14 +768,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [resultRocket, isLoadingRocket, handleRocketBoost])
 
-  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
-
   // Use full energy boost
   const useFullEnergyBoostHandler = useCallback(async () => {
     if (!userId) return { success: false, message: "User not found" }
 
     const result = await useFullEnergyBoost(userId)
-    setResultFullEnergy(result)
+    setFullEnergyBoostResult(result)
 
     if (result.success) {
       // Update local state
@@ -590,6 +789,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return { success: false, message: result.message || "Failed to use full energy boost" }
   }, [boosts, energy, maxEnergy, userId])
 
+  // Enhanced refreshUserData function to ensure hourly earnings are updated
   const refreshUserData = async () => {
     try {
       if (!userId) return
@@ -605,6 +805,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setHourlyEarn(userData.hourly_earn)
         setLeagueState(userData.league)
         setLastEnergyUpdate(new Date(userData.last_energy_regen))
+      }
+
+      // Recalculate hourly earnings from cards to ensure they're up to date
+      const { data: userItems } = await supabase.from("user_items").select("hourly_income").eq("user_id", userId)
+
+      if (userItems) {
+        const calculatedHourlyEarn = userItems.reduce((total, item) => total + item.hourly_income, 0)
+
+        // Update the state and database if different
+        if (calculatedHourlyEarn !== userData.hourly_earn) {
+          setHourlyEarn(calculatedHourlyEarn)
+
+          await supabase
+            .from("users")
+            .update({
+              hourly_earn: calculatedHourlyEarn,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", userId)
+        }
       }
 
       // Fetch user boosts

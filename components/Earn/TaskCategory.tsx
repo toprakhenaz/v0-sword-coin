@@ -2,7 +2,8 @@
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
-import { motion } from "framer-motion"
+import { useLeagueData } from "@/data/GeneralData"
+import { useUser } from "@/context/UserContext"
 
 interface TaskCategoryProps {
   categories: string[]
@@ -11,46 +12,54 @@ interface TaskCategoryProps {
 }
 
 export default function TaskCategory({ categories, activeCategory, setActiveCategory }: TaskCategoryProps) {
+  const { league } = useUser()
+  const { getLeagueColors } = useLeagueData()
+  const colors = getLeagueColors(league)
+
+  // Get category icon
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case "All":
+        return icons.listCheck
+      case "Daily":
+        return icons.calendar
+      case "Crypto":
+        return icons.coins
+      case "Social":
+        return icons.userGroup
+      case "Learn":
+        return icons.bookOpen
+      default:
+        return icons.listCheck
+    }
+  }
+
   return (
-    <motion.div
-      className="mb-4 overflow-x-auto scrollbar-hide"
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-    >
+    <div className="mb-4 overflow-x-auto scrollbar-hide">
       <div className="flex space-x-2 p-1">
         {categories.map((category) => (
           <button
             key={category}
             className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-300 ${
               activeCategory === category
-                ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg"
+                ? "text-white shadow-lg"
                 : "bg-gray-800/70 text-gray-300 hover:bg-gray-700/70 hover:text-white"
             }`}
+            style={
+              activeCategory === category
+                ? {
+                    background: `linear-gradient(to right, ${colors.primary}, ${colors.secondary})`,
+                    boxShadow: `0 2px 8px ${colors.glow}50`,
+                  }
+                : {}
+            }
             onClick={() => setActiveCategory(category)}
           >
-            {getCategoryIcon(category)}
-            <span className="ml-1">{category}</span>
+            <FontAwesomeIcon icon={getCategoryIcon(category)} className="mr-1" />
+            <span>{category}</span>
           </button>
         ))}
       </div>
-    </motion.div>
+    </div>
   )
-}
-
-function getCategoryIcon(category: string) {
-  switch (category) {
-    case "All":
-      return <FontAwesomeIcon icon={icons.star} className="text-xs" />
-    case "Daily":
-      return <FontAwesomeIcon icon={icons.clock} className="text-xs" />
-    case "Crypto":
-      return <FontAwesomeIcon icon={icons.coins} className="text-xs" />
-    case "Social":
-      return <FontAwesomeIcon icon={icons.userGroup} className="text-xs" />
-    case "Learn":
-      return <FontAwesomeIcon icon={icons.infoCircle} className="text-xs" />
-    default:
-      return <FontAwesomeIcon icon={icons.star} className="text-xs" />
-  }
 }
