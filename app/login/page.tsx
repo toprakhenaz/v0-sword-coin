@@ -20,10 +20,22 @@ export default function LoginPage() {
       try {
         addDebugInfo("Telegram başlatılıyor...")
 
-        // Önce veritabanı tablolarını oluşturalım
+        // Önce RPC fonksiyonlarını oluşturalım
+        try {
+          addDebugInfo("RPC fonksiyonları kontrol ediliyor...")
+          const rpcResponse = await fetch("/api/setup-rpc")
+          const rpcResult = await rpcResponse.json()
+          addDebugInfo(`RPC sonucu: ${rpcResult.success ? "Başarılı" : "Başarısız"}`)
+        } catch (rpcError) {
+          addDebugInfo(`RPC hatası: ${String(rpcError)}`)
+        }
+
+        // Sonra veritabanı tablolarını oluşturalım
         try {
           addDebugInfo("Veritabanı tabloları kontrol ediliyor...")
-          const seedResponse = await fetch("/api/seed")
+          const seedResponse = await fetch("/api/create-tables", {
+            method: "POST",
+          })
           const seedResult = await seedResponse.json()
           addDebugInfo(`Veritabanı sonucu: ${seedResult.success ? "Başarılı" : "Başarısız"}`)
         } catch (seedError) {

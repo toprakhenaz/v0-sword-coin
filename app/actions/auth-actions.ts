@@ -103,53 +103,102 @@ async function createOrUpdateUser(userData: any) {
     if (userError) {
       console.log("Kullanıcı bulunamadı, yeni kullanıcı oluşturuluyor")
 
+      // Önce first_name sütununun varlığını kontrol edelim
+      try {
+        await supabase.rpc("exec_sql", {
+          sql_query: `ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT;`,
+        })
+        console.log("first_name sütunu kontrol edildi/eklendi")
+      } catch (columnError) {
+        console.error("Sütun kontrolü hatası:", columnError)
+      }
+
       // User doesn't exist, create a new one
       console.log("Yeni kullanıcı ekleniyor:", { telegramId, username })
-      const { data: newUser, error: createError } = await supabase
-        .from("users")
-        .insert([
-          {
-            telegram_id: telegramId,
-            username: username,
-            first_name: firstName,
-            last_name: lastName,
-            photo_url: photoUrl,
-            coins: 1000,
-            league: 1,
-            hourly_earn: 10,
-            earn_per_tap: 1,
-            energy: 100,
-            max_energy: 100,
-            last_energy_regen: new Date().toISOString(),
-            last_hourly_collect: new Date().toISOString(),
-          },
-        ])
-        .select()
-        .single()
 
-      if (createError) {
-        console.error("Kullanıcı oluşturma hatası:", createError)
+      // Doğrudan SQL ile kullanıcı oluşturmayı deneyelim
+      try {
+        const { data: sqlResult, error: sqlError } = await supabase.rpc("exec_sql", {
+          sql_query: `
+            INSERT INTO users (
+              telegram_id, username, first_name, last_name, photo_url, 
+              coins, league, hourly_earn, earn_per_tap, energy, max_energy,
+              last_energy_regen, last_hourly_collect, created_at, updated_at
+            ) 
+            VALUES (
+              '${telegramId}', '${username}', '${firstName}', '${lastName}', '${photoUrl}',
+              1000, 1, 10, 1, 100, 100,
+              NOW(), NOW(), NOW(), NOW()
+            )
+            RETURNING id;
+          `,
+        })
 
-        // Tekrar kullanıcı sorgulayalım, belki başka bir işlem tarafından oluşturulmuştur
-        const { data: retryUser, error: retryError } = await supabase
+        if (sqlError) {
+          console.error("SQL ile kullanıcı oluşturma hatası:", sqlError)
+        } else {
+          console.log("SQL ile kullanıcı oluşturuldu:", sqlResult)
+          // SQL sonucundan ID'yi çıkaralım
+          const match = sqlResult?.match(/id[^:]*:[^"]*"([^"]*)"/)
+          if (match && match[1]) {
+            userId = match[1]
+            console.log("Kullanıcı ID'si:", userId)
+          }
+        }
+      } catch (sqlCreateError) {
+        console.error("SQL ile kullanıcı oluşturma hatası:", sqlCreateError)
+      }
+
+      // SQL ile oluşturma başarısız olduysa normal yöntemi deneyelim
+      if (!userId) {
+        const { data: newUser, error: createError } = await supabase
           .from("users")
-          .select("*")
-          .eq("telegram_id", telegramId)
+          .insert([
+            {
+              telegram_id: telegramId,
+              username: username,
+              first_name: firstName,
+              last_name: lastName,
+              photo_url: photoUrl,
+              coins: 1000,
+              league: 1,
+              hourly_earn: 10,
+              earn_per_tap: 1,
+              energy: 100,
+              max_energy: 100,
+              last_energy_regen: new Date().toISOString(),
+              last_hourly_collect: new Date().toISOString(),
+            },
+          ])
+          .select()
           .single()
 
-        if (retryError) {
-          console.error("Tekrar kullanıcı sorgulama hatası:", retryError)
-          return { success: false, error: "Kullanıcı oluşturulamadı: " + createError.message }
+        if (createError) {
+          console.error("Kullanıcı oluşturma hatası:", createError)
+
+          // Tekrar kullanıcı sorgulayalım, belki başka bir işlem tarafından oluşturulmuştur
+          const { data: retryUser, error: retryError } = await supabase
+            .from("users")
+            .select("*")
+            .eq("telegram_id", telegramId)
+            .single()
+
+          if (retryError) {
+            console.error("Tekrar kullanıcı sorgulama hatası:", retryError)
+            return { success: false, error: "Kullanıcı oluşturulamadı: " + createError.message }
+          }
+
+          console.log("Kullanıcı başka bir işlem tarafından oluşturulmuş olabilir, devam ediliyor")
+          existingUser = retryUser
+          userId = retryUser.id
+        } else {
+          console.log("Yeni kullanıcı oluşturuldu:", newUser?.id)
+          userId = newUser.id
         }
+      }
 
-        console.log("Kullanıcı başka bir işlem tarafından oluşturulmuş olabilir, devam ediliyor")
-        existingUser = retryUser
-        userId = retryUser.id
-      } else {
-        console.log("Yeni kullanıcı oluşturuldu:", newUser?.id)
-        userId = newUser.id
-
-        // Create initial boosts for the user
+      // Create initial boosts for the user
+      if (userId) {
         console.log("Kullanıcı boost'ları oluşturuluyor")
         const { error: boostError } = await supabase.from("user_boosts").insert([
           {
@@ -169,6 +218,8 @@ async function createOrUpdateUser(userData: any) {
         } else {
           console.log("Kullanıcı boost'ları oluşturuldu")
         }
+      } else {
+        return { success: false, error: "Kullanıcı ID'si alınamadı" }
       }
     } else {
       console.log("Kullanıcı bulundu, bilgiler güncelleniyor:", existingUser.id)

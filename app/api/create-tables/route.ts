@@ -6,52 +6,67 @@ export async function POST() {
     console.log("SQL dosyası ile tablolar oluşturuluyor")
     const supabase = createServerClient()
 
-    // Supabase'in SQL API'sini kullanarak tabloları oluştur
-    // Bu yöntem, doğrudan SQL çalıştırmak yerine Supabase'in API'sini kullanır
-
-    // Users tablosu
-    const { error: usersError } = await supabase
-      .from("users")
-      .insert({
-        telegram_id: "temp_user_for_schema",
-        username: "temp_user",
-        coins: 0,
-        energy: 0,
-        max_energy: 0,
-        earn_per_tap: 0,
-        hourly_earn: 0,
-        league: 0,
+    // Önce mevcut tabloları kontrol edelim
+    try {
+      const { data: userColumns, error: columnsError } = await supabase.rpc("get_table_columns", {
+        table_name: "users",
       })
-      .select()
-      .single()
 
-    if (usersError && !usersError.message.includes("duplicate")) {
-      console.error("Users tablosu oluşturma hatası:", usersError)
-    } else {
-      console.log("Users tablosu oluşturuldu veya zaten var")
-
-      // Geçici kullanıcıyı sil
-      await supabase.from("users").delete().eq("telegram_id", "temp_user_for_schema")
+      // Eğer tablo varsa ama first_name sütunu yoksa, sütunu ekleyelim
+      if (!columnsError && userColumns && !userColumns.includes("first_name")) {
+        console.log("first_name sütunu ekleniyor...")
+        await supabase.rpc("exec_sql", {
+          sql_query: `ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT;`,
+        })
+        console.log("first_name sütunu eklendi")
+      }
+    } catch (columnCheckError) {
+      console.log("Sütun kontrolü sırasında hata:", columnCheckError)
+      // Hata olsa bile devam et
     }
 
-    // User boosts tablosu - users tablosu oluşturulduktan sonra
+    // Users tablosu
     try {
-      // Önce bir kullanıcı oluştur (eğer yoksa)
-      const { data: testUser, error: testUserError } = await supabase
-        .from("users")
-        .select("id")
-        .eq("telegram_id", "test_user_schema")
-        .single()
+      console.log("Users tablosu oluşturuluyor...")
+      await supabase.rpc("exec_sql", {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            telegram_id TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            first_name TEXT,
+            last_name TEXT,
+            photo_url TEXT,
+            coins BIGINT DEFAULT 1000,
+            energy INTEGER DEFAULT 100,
+            max_energy INTEGER DEFAULT 100,
+            earn_per_tap INTEGER DEFAULT 1,
+            hourly_earn INTEGER DEFAULT 10,
+            league INTEGER DEFAULT 1,
+            last_energy_regen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            last_hourly_collect TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+        `,
+      })
+      console.log("Users tablosu oluşturuldu veya güncellendi")
+    } catch (usersTableError) {
+      console.error("Users tablosu oluşturma hatası:", usersTableError)
 
-      let userId
+      // Alternatif yöntem - INSERT ile şema oluştur
+      try {
+        console.log("Alternatif yöntem deneniyor...")
+        const { data: existingUser, error: checkError } = await supabase.from("users").select("id").limit(1)
 
-      if (testUserError) {
-        // Test kullanıcısı oluştur
-        const { data: newUser, error: createUserError } = await supabase
-          .from("users")
-          .insert({
-            telegram_id: "test_user_schema",
-            username: "test_user",
+        if (checkError) {
+          // Tablo yok, oluşturalım
+          const { error: insertError } = await supabase.from("users").insert({
+            telegram_id: "temp_schema_user",
+            username: "temp_user",
+            first_name: "Temp",
+            last_name: "User",
+            photo_url: "",
             coins: 1000,
             energy: 100,
             max_energy: 100,
@@ -59,93 +74,92 @@ export async function POST() {
             hourly_earn: 10,
             league: 1,
           })
-          .select()
-          .single()
 
-        if (createUserError) {
-          console.error("Test kullanıcısı oluşturma hatası:", createUserError)
+          if (insertError) {
+            console.error("Alternatif yöntem hatası:", insertError)
+          } else {
+            console.log("Users tablosu alternatif yöntemle oluşturuldu")
+            // Geçici kullanıcıyı sil
+            await supabase.from("users").delete().eq("telegram_id", "temp_schema_user")
+          }
         } else {
-          userId = newUser.id
+          console.log("Users tablosu zaten var")
         }
-      } else {
-        userId = testUser.id
+      } catch (alternativeError) {
+        console.error("Alternatif yöntem hatası:", alternativeError)
       }
-
-      if (userId) {
-        // User boosts tablosu
-        const { error: boostsError } = await supabase
-          .from("user_boosts")
-          .insert({
-            user_id: userId,
-            multi_touch_level: 1,
-            energy_limit_level: 1,
-            charge_speed_level: 1,
-            daily_rockets: 3,
-            max_daily_rockets: 3,
-            energy_full_used: false,
-          })
-          .select()
-          .single()
-
-        if (boostsError && !boostsError.message.includes("duplicate")) {
-          console.error("User boosts tablosu oluşturma hatası:", boostsError)
-        } else {
-          console.log("User boosts tablosu oluşturuldu veya zaten var")
-        }
-
-        // Coin transactions tablosu
-        const { error: transactionsError } = await supabase
-          .from("coin_transactions")
-          .insert({
-            user_id: userId,
-            amount: 0,
-            type: "schema_init",
-            description: "Schema initialization",
-          })
-          .select()
-          .single()
-
-        if (transactionsError && !transactionsError.message.includes("duplicate")) {
-          console.error("Coin transactions tablosu oluşturma hatası:", transactionsError)
-        } else {
-          console.log("Coin transactions tablosu oluşturuldu veya zaten var")
-
-          // Geçici işlemi sil
-          await supabase.from("coin_transactions").delete().eq("type", "schema_init")
-        }
-
-        // Daily combos tablosu
-        const today = new Date().toISOString().split("T")[0]
-        const { error: combosError } = await supabase
-          .from("daily_combos")
-          .insert({
-            user_id: userId,
-            date: today,
-            card_ids: [1, 2, 3],
-            found_card_ids: [],
-            reward: 1000,
-            is_completed: false,
-          })
-          .select()
-          .single()
-
-        if (combosError && !combosError.message.includes("duplicate")) {
-          console.error("Daily combos tablosu oluşturma hatası:", combosError)
-        } else {
-          console.log("Daily combos tablosu oluşturuldu veya zaten var")
-
-          // Geçici combo'yu sil
-          await supabase.from("daily_combos").delete().eq("user_id", userId).eq("date", today)
-        }
-
-        // Test kullanıcısını sil
-        await supabase.from("users").delete().eq("telegram_id", "test_user_schema")
-      }
-    } catch (tablesError) {
-      console.error("İlişkili tablolar oluşturma hatası:", tablesError)
     }
 
-    return NextResponse.json({ success: true, message: "Tablolar oluşturuldu" })
+    // Diğer tablolar için benzer işlemler...
+    // User boosts tablosu
+    try {
+      console.log("User boosts tablosu oluşturuluyor...")
+      await supabase.rpc("exec_sql", {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS user_boosts (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            multi_touch_level INTEGER DEFAULT 1,
+            energy_limit_level INTEGER DEFAULT 1,
+            charge_speed_level INTEGER DEFAULT 1,
+            daily_rockets INTEGER DEFAULT 3,
+            max_daily_rockets INTEGER DEFAULT 3,
+            energy_full_used BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+        `,
+      })
+      console.log("User boosts tablosu oluşturuldu")
+    } catch (boostsError) {
+      console.error("User boosts tablosu oluşturma hatası:", boostsError)
+    }
+
+    // Coin transactions tablosu
+    try {
+      console.log("Coin transactions tablosu oluşturuluyor...")
+      await supabase.rpc("exec_sql", {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS coin_transactions (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            amount BIGINT NOT NULL,
+            type TEXT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+        `,
+      })
+      console.log("Coin transactions tablosu oluşturuldu")
+    } catch (transactionsError) {
+      console.error("Coin transactions tablosu oluşturma hatası:", transactionsError)
+    }
+
+    // Daily combos tablosu
+    try {
+      console.log("Daily combos tablosu oluşturuluyor...")
+      await supabase.rpc("exec_sql", {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS daily_combos (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            date DATE NOT NULL,
+            card_ids INTEGER[] NOT NULL,
+            found_card_ids INTEGER[] DEFAULT '{}',
+            reward BIGINT NOT NULL,
+            is_completed BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            UNIQUE(user_id, date)
+          );
+        `,
+      })
+      console.log("Daily combos tablosu oluşturuldu")
+    } catch (combosError) {
+      console.error("Daily combos tablosu oluşturma hatası:", combosError)
+    }
+
+    return NextResponse.json({ success: true, message: "Tablolar oluşturuldu veya güncellendi" })
   } catch (error) {
     console.error("SQL dosyası ile tablo oluşturma hatası:", error)
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 })
