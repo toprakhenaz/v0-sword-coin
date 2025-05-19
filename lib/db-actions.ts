@@ -1,6 +1,6 @@
 "use server"
 
-import { createServerClient } from "./supabase"
+import { createServerClient } from "./supabase-server"
 
 // Update user coins
 export async function updateUserCoins(userId: string, amount: number, transactionType: string, description?: string) {

@@ -1,7 +1,7 @@
 "use server"
 
 import { cookies } from "next/headers"
-import { createServerClient } from "@/lib/supabase"
+import { createServerClient } from "@/lib/supabase-server"
 import { verifyTelegramAuth, parseTelegramAuthData } from "@/lib/telegram-auth"
 
 export async function telegramAuth(initData: string) {
