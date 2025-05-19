@@ -25,7 +25,6 @@ import {
   faSort,
   faPlus,
   faFilter,
-  faSignOutAlt,
 } from "@fortawesome/free-solid-svg-icons"
 
 export const icons = {
@@ -55,5 +54,4 @@ export const icons = {
   sort: faSort,
   plus: faPlus,
   filter: faFilter,
-  signOut: faSignOutAlt,
 }

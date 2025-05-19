@@ -2,81 +2,157 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import TelegramLogin from "@/components/TelegramLogin"
+import { useUser } from "@/context/UserContext"
+import Image from "next/image"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { icons } from "@/icons"
+import { supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { isAuthenticated, isLoading, setDefaultUser } = useUser()
+  const [isCreatingDefaultUser, setIsCreatingDefaultUser] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  // Redirect to home if already authenticated
   useEffect(() => {
-    // Simple check to see if we're in a browser environment
-    if (typeof window !== "undefined") {
-      setIsLoading(false)
+    if (isAuthenticated && !isLoading) {
+      router.push("/")
     }
-  }, [])
+  }, [isAuthenticated, isLoading, router])
 
-  const handleLoginWithTelegram = () => {
-    // For demonstration, we'll use a mock login
-    // In production, this would integrate with Telegram's auth
-    localStorage.setItem(
-      "demo_user",
-      JSON.stringify({
-        id: "12345",
-        username: "demo_user",
-        first_name: "Demo",
-        coins: 1000,
-        energy: 100,
-        max_energy: 100,
-        league: 1,
-      }),
-    )
+  const handleContinueAsGuest = async () => {
+    try {
+      setIsCreatingDefaultUser(true)
+      setErrorMessage(null)
 
-    router.push("/")
+      // Create a random username for the guest user
+      const guestUsername = `guest_${Math.floor(Math.random() * 10000)}`
+
+      // Create a new default user
+      const { data: newUser, error: createError } = await supabase
+        .from("users")
+        .insert([
+          {
+            username: guestUsername,
+            coins: 1000,
+            league: 1,
+            hourly_earn: 10,
+            earn_per_tap: 1,
+            energy: 100,
+            max_energy: 100,
+            last_energy_regen: new Date().toISOString(),
+            last_hourly_collect: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single()
+
+      if (createError) {
+        console.error("Error creating default user:", createError)
+        setErrorMessage("Failed to create guest account. Please try again.")
+        setIsCreatingDefaultUser(false)
+        return
+      }
+
+      // Create initial boosts for the user
+      await supabase.from("user_boosts").insert([
+        {
+          user_id: newUser.id,
+          multi_touch_level: 1,
+          energy_limit_level: 1,
+          charge_speed_level: 1,
+          daily_rockets: 3,
+          max_daily_rockets: 3,
+          energy_full_used: false,
+        },
+      ])
+
+      // Set the default user in context
+      setDefaultUser(newUser)
+
+      // Redirect to home page
+      router.push("/")
+    } catch (error) {
+      console.error("Error creating default user:", error)
+      setErrorMessage("An unexpected error occurred. Please try again.")
+      setIsCreatingDefaultUser(false)
+    }
   }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4">
-        <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-xl">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="animate-pulse text-white text-xl">Yükleniyor...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4">
-      <div className="max-w-md w-full bg-gray-800 rounded-xl shadow-lg p-8 mb-8">
-        <div className="text-center mb-8">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-4">
+      <div className="max-w-md w-full bg-gray-800 rounded-xl shadow-lg p-8 space-y-8">
+        <div className="text-center">
           <h1 className="text-3xl font-bold mb-2">Sword Coin</h1>
-          <p className="text-gray-400">Login to start earning coins!</p>
+          <p className="text-gray-400">Giriş yaparak oyuna başlayın</p>
         </div>
 
-        {error && <div className="bg-red-500/20 border border-red-500 text-red-300 p-4 rounded-lg mb-6">{error}</div>}
+        <div className="flex justify-center">
+          <Image
+            src="/wooden-fantasy-sword.png"
+            alt="Sword Coin Logo"
+            width={150}
+            height={150}
+            className="animate-pulse"
+          />
+        </div>
 
-        <div className="space-y-4">
-          <button
-            onClick={handleLoginWithTelegram}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
-          >
-            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-1.97 9.269c-.145.658-.537.818-1.084.51l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.334-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.538-.196 1.006.128.833.95z" />
-            </svg>
-            Login with Telegram
-          </button>
-
-          <div className="text-center text-sm text-gray-500 mt-4">
-            <p>This app works best inside Telegram.</p>
-            <p>Open in Telegram for the full experience!</p>
+        <div className="space-y-6">
+          <div className="bg-gray-700 rounded-lg p-4">
+            <h2 className="text-lg font-semibold mb-2">Oyun Özellikleri</h2>
+            <ul className="list-disc list-inside space-y-1 text-gray-300">
+              <li>Tıklayarak coin kazanın</li>
+              <li>Ekipmanlarınızı yükseltin</li>
+              <li>Liglerde yükselin</li>
+              <li>Arkadaşlarınızla rekabet edin</li>
+            </ul>
           </div>
 
-          <div className="mt-6 pt-6 border-t border-gray-700">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="w-full">
+              <TelegramLogin
+                botName={process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || "innoSwordCoinBot"}
+                buttonSize="large"
+                cornerRadius={8}
+                className="flex justify-center"
+              />
+            </div>
+
+            <div className="flex items-center w-full">
+              <div className="flex-grow h-px bg-gray-700"></div>
+              <span className="px-4 text-gray-500 text-sm">veya</span>
+              <div className="flex-grow h-px bg-gray-700"></div>
+            </div>
+
             <button
-              onClick={() => router.push("/")}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors"
+              onClick={handleContinueAsGuest}
+              disabled={isCreatingDefaultUser}
+              className="w-full py-3 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center justify-center transition-colors"
             >
-              Continue as Guest
+              {isCreatingDefaultUser ? (
+                <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin mr-2"></div>
+              ) : (
+                <FontAwesomeIcon icon={icons.userGroup} className="mr-2" />
+              )}
+              Misafir Olarak Devam Et
             </button>
           </div>
+
+          {errorMessage && <div className="text-red-400 text-sm text-center">{errorMessage}</div>}
+
+          <p className="text-xs text-center text-gray-400">
+            Giriş yaparak kullanım koşullarını ve gizlilik politikasını kabul etmiş olursunuz.
+          </p>
         </div>
       </div>
     </div>

@@ -2,12 +2,28 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
-import { useRouter } from "next/navigation"
-import { checkAuth } from "@/app/actions/auth-actions"
-import { updateUserCoins, updateUserEnergy, getUserDailyCombo } from "@/lib/db-actions"
+import {
+  updateUserCoins,
+  updateUserEnergy,
+  upgradeBoost,
+  useRocketBoost,
+  useFullEnergyBoost,
+  collectHourlyEarnings,
+  getUserDailyCombo,
+  findDailyComboCard,
+} from "@/lib/db-actions"
+
+interface TelegramUserData {
+  id: string
+  username: string
+  first_name: string
+  last_name?: string
+  photo_url?: string
+}
 
 type UserContextType = {
   userId: string | null
+  telegramId: string | null
   username: string | null
   coins: number
   energy: number
@@ -32,6 +48,8 @@ type UserContextType = {
     maxDailyRockets: number
     energyFullUsed: boolean
   }
+  telegramUser: TelegramUserData | null
+  isAuthenticated: boolean
   updateCoins: (amount: number, transactionType: string, description?: string) => Promise<void>
   updateEnergy: (amount: number) => Promise<void>
   refreshUserData: () => Promise<void>
@@ -52,20 +70,22 @@ type UserContextType = {
     reward?: number
     message?: string
   }>
-  logout: () => Promise<void>
+  setTelegramUser: (user: any) => void
+  setDefaultUser: (user: any) => void
+  logout: () => void
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
+  const [telegramId, setTelegramId] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
-  const [coins, setCoins] = useState(1000)
-  const [energy, setEnergy] = useState(100)
+  const [coins, setCoins] = useState(0)
+  const [energy, setEnergy] = useState(0)
   const [maxEnergy, setMaxEnergy] = useState(100)
   const [earnPerTap, setEarnPerTap] = useState(1)
-  const [hourlyEarn, setHourlyEarn] = useState(10)
+  const [hourlyEarn, setHourlyEarn] = useState(0)
   const [league, setLeagueState] = useState(1)
   const [previousLeague, setPreviousLeague] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -73,6 +93,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [lastEnergyUpdate, setLastEnergyUpdate] = useState<Date>(new Date())
   const [comboCounter, setComboCounter] = useState(0)
   const [tapMultiplier, setTapMultiplier] = useState(1)
+  const [telegramUser, setTelegramUserState] = useState<TelegramUserData | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [dailyCombo, setDailyCombo] = useState({
     cardIds: [1, 2, 3],
     foundCardIds: [],
@@ -88,29 +110,142 @@ export function UserProvider({ children }: { children: ReactNode }) {
     energyFullUsed: false,
   })
 
-  // Check for user in localStorage on load
+  const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
+  const [isLoadingRocket, setIsLoadingRocket] = useState(false)
+  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
+
+  // Set Telegram user
+  const setTelegramUser = useCallback((user: any) => {
+    if (!user) return
+
+    setTelegramUserState({
+      id: user.telegram_id || user.id.toString(),
+      username: user.username,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      photo_url: user.photo_url,
+    })
+
+    setUserId(user.id)
+    setTelegramId(user.telegram_id || user.id.toString())
+    setUsername(user.username)
+    setCoins(user.coins)
+    setEnergy(user.energy)
+    setMaxEnergy(user.max_energy)
+    setEarnPerTap(user.earn_per_tap)
+    setHourlyEarn(user.hourly_earn)
+    setLeagueState(user.league)
+    setLastEnergyUpdate(new Date(user.last_energy_regen))
+    setIsAuthenticated(true)
+
+    // Save to localStorage for session persistence
+    localStorage.setItem("telegramUser", JSON.stringify(user))
+
+    // Load user data
+    refreshUserData()
+  }, [])
+
+  // Set default user (for guest login)
+  const setDefaultUser = useCallback((user: any) => {
+    if (!user) return
+
+    setUserId(user.id)
+    setTelegramId(null)
+    setUsername(user.username)
+    setCoins(user.coins)
+    setEnergy(user.energy)
+    setMaxEnergy(user.max_energy)
+    setEarnPerTap(user.earn_per_tap)
+    setHourlyEarn(user.hourly_earn)
+    setLeagueState(user.league)
+    setLastEnergyUpdate(new Date(user.last_energy_regen))
+    setIsAuthenticated(true)
+
+    // Save to localStorage for session persistence
+    localStorage.setItem("defaultUser", JSON.stringify(user))
+
+    // Load user data
+    refreshUserData()
+  }, [])
+
+  // Logout function
+  const logout = useCallback(() => {
+    setTelegramUserState(null)
+    setUserId(null)
+    setTelegramId(null)
+    setUsername(null)
+    setIsAuthenticated(false)
+
+    // Clear localStorage
+    localStorage.removeItem("telegramUser")
+    localStorage.removeItem("defaultUser")
+
+    // Reset game state
+    setCoins(0)
+    setEnergy(0)
+    setMaxEnergy(100)
+    setEarnPerTap(1)
+    setHourlyEarn(0)
+    setLeagueState(1)
+    setBoosts({
+      multiTouch: { level: 1, cost: 2000 },
+      energyLimit: { level: 1, cost: 2000 },
+      chargeSpeed: { level: 1, cost: 2000 },
+      dailyRockets: 3,
+      maxDailyRockets: 3,
+      energyFullUsed: false,
+    })
+  }, [])
+
+  // Check for existing session on load
   useEffect(() => {
-    const checkUser = () => {
+    const checkSession = async () => {
       try {
-        const savedUser = localStorage.getItem("demo_user")
-        if (savedUser) {
-          const user = JSON.parse(savedUser)
-          setUserId(user.id)
-          setUsername(user.username)
-          setCoins(user.coins || 1000)
-          setEnergy(user.energy || 100)
-          setMaxEnergy(user.max_energy || 100)
-          setLeagueState(user.league || 1)
+        // First check for telegram user
+        const savedTelegramUser = localStorage.getItem("telegramUser")
+        if (savedTelegramUser) {
+          const user = JSON.parse(savedTelegramUser)
+
+          // Verify the user exists in the database
+          const { data: existingUser } = await supabase.from("users").select("*").eq("telegram_id", user.id).single()
+
+          if (existingUser) {
+            setTelegramUser(existingUser)
+            setIsLoading(false)
+            return
+          } else {
+            // User not found in database, clear localStorage
+            localStorage.removeItem("telegramUser")
+          }
         }
+
+        // Then check for default user
+        const savedDefaultUser = localStorage.getItem("defaultUser")
+        if (savedDefaultUser) {
+          const user = JSON.parse(savedDefaultUser)
+
+          // Verify the user exists in the database
+          const { data: existingUser } = await supabase.from("users").select("*").eq("id", user.id).single()
+
+          if (existingUser) {
+            setDefaultUser(existingUser)
+            setIsLoading(false)
+            return
+          } else {
+            // User not found in database, clear localStorage
+            localStorage.removeItem("defaultUser")
+          }
+        }
+
         setIsLoading(false)
       } catch (error) {
-        console.error("Error checking user:", error)
+        console.error("Error checking session:", error)
         setIsLoading(false)
       }
     }
 
-    checkUser()
-  }, [])
+    checkSession()
+  }, [setTelegramUser, setDefaultUser])
 
   // Seviyeyi değiştirmek için fonksiyon
   const setLeague = (newLeague: number) => {
@@ -149,101 +284,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const [telegramId, setTelegramId] = useState<string | null>(null)
-
-  // Check authentication and initialize user data
-  useEffect(() => {
-    const initUser = async () => {
-      try {
-        // First, check authentication
-        const { authenticated, userId: authUserId, telegramId: authTelegramId } = await checkAuth()
-
-        if (!authenticated) {
-          // Redirect to login if not authenticated
-          router.push("/login")
-          return
-        }
-
-        // Set user ID and Telegram ID from authentication
-        setUserId(authUserId || null)
-        setTelegramId(authTelegramId || null)
-
-        // Seed the database if needed
-        await fetch("/api/seed")
-
-        // Fetch user data
-        if (authUserId) {
-          const { data: userData, error: userError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", authUserId)
-            .single()
-
-          if (userError) {
-            console.error("Error fetching user data:", userError)
-            setIsLoading(false)
-            return
-          }
-
-          // Set user data
-          setUsername(userData.username)
-          setCoins(userData.coins)
-          setEnergy(userData.energy)
-          setMaxEnergy(userData.max_energy)
-          setEarnPerTap(userData.earn_per_tap)
-          setHourlyEarn(userData.hourly_earn)
-          setLeagueState(userData.league)
-          setLastEnergyUpdate(new Date(userData.last_energy_regen))
-
-          // Load user boosts
-          const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", authUserId).single()
-
-          if (userBoosts) {
-            setBoosts({
-              multiTouch: {
-                level: userBoosts.multi_touch_level,
-                cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
-              },
-              energyLimit: {
-                level: userBoosts.energy_limit_level,
-                cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
-              },
-              chargeSpeed: {
-                level: userBoosts.charge_speed_level,
-                cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
-              },
-              dailyRockets: userBoosts.daily_rockets,
-              maxDailyRockets: userBoosts.max_daily_rockets,
-              energyFullUsed: userBoosts.energy_full_used,
-            })
-          }
-
-          // Load daily combo
-          const dailyComboData = await getUserDailyCombo(authUserId)
-          if (dailyComboData) {
-            setDailyCombo({
-              cardIds: dailyComboData.card_ids,
-              foundCardIds: dailyComboData.found_card_ids,
-              reward: dailyComboData.reward,
-              isCompleted: dailyComboData.is_completed,
-            })
-          }
-        }
-
-        setIsLoading(false)
-      } catch (error) {
-        console.error("Error initializing user:", error)
-        setIsLoading(false)
-      }
-    }
-
-    initUser()
-  }, [router])
-
   // Auto regenerate energy based on time passed
   useEffect(() => {
     // Calculate energy to regenerate based on time passed since last update
-    if (energy < maxEnergy) {
+    if (userId && energy < maxEnergy) {
       const now = new Date()
       const timeDiffMs = now.getTime() - lastEnergyUpdate.getTime()
       const minutesPassed = timeDiffMs / (1000 * 60)
@@ -256,9 +300,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const newEnergy = Math.min(maxEnergy, energy + energyToAdd)
         setEnergy(newEnergy)
         setLastEnergyUpdate(now)
+
+        // Update in database
+        supabase
+          .from("users")
+          .update({
+            energy: newEnergy,
+            last_energy_regen: now.toISOString(),
+          })
+          .eq("id", userId)
+          .then(() => {
+            console.log("Energy updated based on time passed")
+          })
+          .catch((error) => {
+            console.error("Error updating energy:", error)
+          })
       }
     }
-  }, [energy, maxEnergy, lastEnergyUpdate, boosts.chargeSpeed.level])
+  }, [userId, energy, maxEnergy, lastEnergyUpdate, boosts.chargeSpeed.level])
 
   // Energy regeneration timer
   const updateEnergyHandler = useCallback(
@@ -294,7 +353,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let energyInterval: NodeJS.Timeout | null = null
 
-    if (energy < maxEnergy) {
+    if (userId && energy < maxEnergy) {
       const chargeMultiplier = 1 + (boosts.chargeSpeed.level - 1) * 0.2 // 20% increase per level
       const regenTime = 60000 / chargeMultiplier // Adjust regen time based on charge speed
 
@@ -306,7 +365,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => {
       if (energyInterval) clearInterval(energyInterval)
     }
-  }, [energy, maxEnergy, boosts.chargeSpeed.level, updateEnergyHandler])
+  }, [userId, energy, maxEnergy, boosts.chargeSpeed.level, updateEnergyHandler])
 
   // Combo system
   useEffect(() => {
@@ -327,18 +386,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     // Update local state
     const newCoins = coins + amount
     setCoins(newCoins)
-
-    // Update in localStorage
-    try {
-      const savedUser = localStorage.getItem("demo_user")
-      if (savedUser) {
-        const user = JSON.parse(savedUser)
-        user.coins = newCoins
-        localStorage.setItem("demo_user", JSON.stringify(user))
-      }
-    } catch (error) {
-      console.error("Error updating coins:", error)
-    }
 
     // Update in database
     await updateUserCoins(userId, amount, transactionType, description)
@@ -408,142 +455,162 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // Collect hourly earnings
   const collectHourlyEarningsHandler = useCallback(async () => {
-    // Simulate hourly earnings
-    const earningsAmount = hourlyEarn
-    await updateCoinsHandler(earningsAmount, "hourly", "Hourly earnings")
-    return { success: true, coins: earningsAmount }
-  }, [hourlyEarn])
+    if (!userId) return { success: false, message: "User not found" }
+
+    const result = await collectHourlyEarnings(userId)
+
+    if (result.success && result.coins) {
+      setCoins(coins + result.coins)
+      return { success: true, coins: result.coins }
+    }
+
+    return { success: false, message: result.message || "Failed to collect earnings" }
+  }, [coins, userId])
 
   // Upgrade boost
   const upgradeBoostHandler = async (boostType: string) => {
-    // Determine which boost to upgrade and calculate cost
-    let boostField = ""
-    let currentLevel = 1
-    let cost = 0
+    if (!userId) return { success: false, message: "User not found" }
 
-    if (boostType === "multiTouch") {
-      boostField = "multiTouch"
-      currentLevel = boosts.multiTouch.level
-      cost = boosts.multiTouch.cost
-    } else if (boostType === "energyLimit") {
-      boostField = "energyLimit"
-      currentLevel = boosts.energyLimit.level
-      cost = boosts.energyLimit.cost
-    } else if (boostType === "chargeSpeed") {
-      boostField = "chargeSpeed"
-      currentLevel = boosts.chargeSpeed.level
-      cost = boosts.chargeSpeed.cost
-    } else {
-      return { success: false, message: "Invalid boost type" }
+    const result = await upgradeBoost(userId, boostType)
+
+    if (result.success) {
+      // Update local state
+      const updatedBoosts = { ...boosts }
+
+      if (boostType === "multiTouch") {
+        updatedBoosts.multiTouch.level = result.newLevel || boosts.multiTouch.level + 1
+        updatedBoosts.multiTouch.cost = result.cost || Math.floor(boosts.multiTouch.cost * 1.5)
+        setEarnPerTap(1 + (updatedBoosts.multiTouch.level - 1) * 2)
+      } else if (boostType === "energyLimit") {
+        updatedBoosts.energyLimit.level = result.newLevel || boosts.energyLimit.level + 1
+        updatedBoosts.energyLimit.cost = result.cost || Math.floor(boosts.energyLimit.cost * 1.5)
+        setMaxEnergy(100 + (updatedBoosts.energyLimit.level - 1) * 500)
+      } else if (boostType === "chargeSpeed") {
+        updatedBoosts.chargeSpeed.level = result.newLevel || boosts.chargeSpeed.level + 1
+        updatedBoosts.chargeSpeed.cost = result.cost || Math.floor(boosts.energyLimit.cost * 1.5)
+      }
+
+      setBoosts(updatedBoosts)
+
+      // Calculate cost based on boost type
+      let cost = 0
+      if (boostType === "multiTouch") {
+        cost = boosts.multiTouch.cost
+      } else if (boostType === "energyLimit") {
+        cost = boosts.energyLimit.cost
+      } else if (boostType === "chargeSpeed") {
+        cost = boosts.chargeSpeed.cost
+      }
+
+      // Update coins
+      setCoins(coins - cost)
+
+      return { success: true }
     }
 
-    // Check if user has enough coins
-    if (coins < cost) {
-      return { success: false, message: "Not enough coins" }
-    }
-
-    // Update boost level
-    const newLevel = currentLevel + 1
-    const updatedBoosts = { ...boosts }
-
-    if (boostType === "multiTouch") {
-      updatedBoosts.multiTouch.level = newLevel
-      updatedBoosts.multiTouch.cost = Math.floor(cost * 1.5)
-      setEarnPerTap(1 + (newLevel - 1) * 2)
-    } else if (boostType === "energyLimit") {
-      updatedBoosts.energyLimit.level = newLevel
-      updatedBoosts.energyLimit.cost = Math.floor(cost * 1.5)
-      setMaxEnergy(100 + (newLevel - 1) * 500)
-    } else if (boostType === "chargeSpeed") {
-      updatedBoosts.chargeSpeed.level = newLevel
-      updatedBoosts.chargeSpeed.cost = Math.floor(cost * 1.5)
-    }
-
-    setBoosts(updatedBoosts)
-
-    // Calculate cost based on boost type
-    /*let cost = 0
-    if (boostType === "multiTouch") {
-      cost = boosts.multiTouch.cost
-    } else if (boostType === "energyLimit") {
-      cost = boosts.energyLimit.cost
-    } else if (boostType === "chargeSpeed") {
-      cost = boosts.chargeSpeed.cost
-    }*/
-
-    // Update coins
-    await updateCoinsHandler(-cost, "boost_upgrade", `Upgraded ${boostType} to level ${newLevel}`)
-
-    return { success: true }
+    return { success: false, message: result.message || "Failed to upgrade boost" }
   }
 
   // Use rocket boost
-  const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
-  const [isLoadingRocket, setIsLoadingRocket] = useState(false)
-
   const handleRocketBoost = useCallback(async () => {
-    if (isLoadingRocket) return
+    if (!userId || isLoadingRocket) return
 
     setIsLoadingRocket(true)
     try {
-      // Check if user has rockets left
-      if (boosts.dailyRockets <= 0) {
-        setResultRocket({ success: false, message: "No rockets left for today" })
-        return
+      const boostResult = await useRocketBoost(userId)
+      setResultRocket(boostResult)
+
+      if (boostResult.success) {
+        // Update local state
+        setBoosts({
+          ...boosts,
+          dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
+        })
+        setEnergy(Math.min(maxEnergy, energy + 500))
       }
-
-      // Update rockets count
-      setBoosts({
-        ...boosts,
-        dailyRockets: boosts.dailyRockets - 1,
-      })
-
-      // Add energy
-      await updateEnergyHandler(500)
-
-      setResultRocket({ success: true })
     } finally {
       setIsLoadingRocket(false)
     }
-  }, [boosts, isLoadingRocket, updateEnergyHandler])
+  }, [boosts, energy, maxEnergy, userId, isLoadingRocket])
 
-  const rocketBoost = () => {
+  const rocketBoost = useCallback(() => {
     return {
       result: resultRocket,
       isLoading: isLoadingRocket,
       handleRocketBoost,
     }
-  }
-
-  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
+  }, [resultRocket, isLoadingRocket, handleRocketBoost])
 
   // Use full energy boost
   const useFullEnergyBoostHandler = useCallback(async () => {
-    // Check if boost already used
-    if (boosts.energyFullUsed) {
-      return { success: false, message: "Full energy boost already used today" }
+    if (!userId) return { success: false, message: "User not found" }
+
+    const result = await useFullEnergyBoost(userId)
+    setResultFullEnergy(result)
+
+    if (result.success) {
+      // Update local state
+      setBoosts({
+        ...boosts,
+        energyFullUsed: true,
+      })
+      setEnergy(maxEnergy)
+
+      return { success: true }
     }
 
-    // Update boost usage
-    setBoosts({
-      ...boosts,
-      energyFullUsed: true,
-    })
-
-    // Set energy to max
-    await updateEnergyHandler(maxEnergy - energy)
-
-    return { success: true }
-  }, [boosts, energy, maxEnergy, updateEnergyHandler])
+    return { success: false, message: result.message || "Failed to use full energy boost" }
+  }, [boosts, energy, maxEnergy, userId])
 
   const refreshUserData = async () => {
-    // For demo purposes, just refresh from localStorage
     try {
-      const savedUser = localStorage.getItem("demo_user")
-      if (savedUser) {
-        const user = JSON.parse(savedUser)
-        setCoins(user.coins || coins)
-        setEnergy(user.energy || energy)
+      if (!userId) return
+
+      // Fetch user data
+      const { data: userData } = await supabase.from("users").select("*").eq("id", userId).single()
+
+      if (userData) {
+        setCoins(userData.coins)
+        setEnergy(userData.energy)
+        setMaxEnergy(userData.max_energy)
+        setEarnPerTap(userData.earn_per_tap)
+        setHourlyEarn(userData.hourly_earn)
+        setLeagueState(userData.league)
+        setLastEnergyUpdate(new Date(userData.last_energy_regen))
+      }
+
+      // Fetch user boosts
+      const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", userId).single()
+
+      if (userBoosts) {
+        setBoosts({
+          multiTouch: {
+            level: userBoosts.multi_touch_level,
+            cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
+          },
+          energyLimit: {
+            level: userBoosts.energy_limit_level,
+            cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
+          },
+          chargeSpeed: {
+            level: userBoosts.charge_speed_level,
+            cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
+          },
+          dailyRockets: userBoosts.daily_rockets,
+          maxDailyRockets: userBoosts.max_daily_rockets,
+          energyFullUsed: userBoosts.energy_full_used,
+        })
+      }
+
+      // Fetch daily combo
+      const dailyComboData = await getUserDailyCombo(userId)
+      if (dailyComboData) {
+        setDailyCombo({
+          cardIds: dailyComboData.card_ids,
+          foundCardIds: dailyComboData.found_card_ids,
+          reward: dailyComboData.reward,
+          isCompleted: dailyComboData.is_completed,
+        })
       }
     } catch (error) {
       console.error("Error refreshing user data:", error)
@@ -551,63 +618,35 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   const findComboCardHandler = async (cardIndex: number) => {
-    // Check if card index is valid
-    if (cardIndex < 0 || cardIndex >= dailyCombo.cardIds.length) {
-      return { success: false, message: "Invalid card index" }
-    }
+    if (!userId) return { success: false, message: "User not found" }
 
-    // Get the card ID at the specified index
-    const cardId = dailyCombo.cardIds[cardIndex]
+    const result = await findDailyComboCard(userId, cardIndex)
 
-    // Check if card is already found
-    if (dailyCombo.foundCardIds.includes(cardId)) {
-      return { success: false, message: "Card already found" }
-    }
+    if (result.success) {
+      // Update local state
+      const updatedDailyCombo = { ...dailyCombo }
+      updatedDailyCombo.foundCardIds = result.foundCardIds || dailyCombo.foundCardIds
+      updatedDailyCombo.isCompleted = result.isCompleted || dailyCombo.isCompleted
 
-    // Add card to found cards
-    const foundCardIds = [...dailyCombo.foundCardIds, cardId]
-    const isCompleted = foundCardIds.length === dailyCombo.cardIds.length
-
-    // Update daily combo
-    setDailyCombo({
-      ...dailyCombo,
-      foundCardIds,
-      isCompleted,
-    })
-
-    // If combo is completed, add reward to user
-    if (isCompleted) {
-      await updateCoinsHandler(dailyCombo.reward, "daily_combo", "Completed daily combo")
+      setDailyCombo(updatedDailyCombo)
+      refreshUserData()
 
       return {
         success: true,
-        cardId,
-        foundCardIds,
-        isCompleted,
-        reward: dailyCombo.reward,
+        cardId: result.cardId,
+        isCompleted: result.isCompleted,
+        reward: result.reward,
       }
     }
 
-    return {
-      success: true,
-      cardId,
-      foundCardIds,
-      isCompleted,
-    }
-  }
-
-  // Logout function
-  const handleLogout = async () => {
-    localStorage.removeItem("demo_user")
-    setUserId(null)
-    setUsername(null)
-    router.push("/login")
+    return { success: false, message: result.message || "Failed to find combo card" }
   }
 
   return (
     <UserContext.Provider
       value={{
         userId,
+        telegramId,
         username,
         coins,
         energy,
@@ -620,6 +659,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         previousLeague,
         dailyCombo,
         boosts,
+        telegramUser,
+        isAuthenticated,
         updateCoins: updateCoinsHandler,
         updateEnergy: updateEnergyHandler,
         refreshUserData,
@@ -630,7 +671,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
         useRocketBoost: rocketBoost,
         useFullEnergyBoost: useFullEnergyBoostHandler,
         findComboCard: findComboCardHandler,
-        logout: handleLogout,
+        setTelegramUser,
+        setDefaultUser,
+        logout,
       }}
     >
       {children}
