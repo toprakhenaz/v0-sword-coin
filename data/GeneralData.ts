@@ -72,13 +72,13 @@ const leagueCoins: Record<number, number> = {
 
 // League names
 export const leagueNames: Record<number, string> = {
-  1: "Ahşap",
-  2: "Bronz",
-  3: "Demir",
-  4: "Çelik",
-  5: "Adamantit",
-  6: "Efsanevi",
-  7: "Ejderha",
+  1: "Wooden",
+  2: "Bronze",
+  3: "Iron",
+  4: "Steel",
+  5: "Adamantite",
+  6: "Legendary",
+  7: "Dragon",
 }
 
 // Custom hook for league data

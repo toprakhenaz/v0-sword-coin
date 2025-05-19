@@ -1,29 +1,37 @@
 "use client"
 
+import { useMemo, useCallback } from "react"
 import type { BottomNavProps } from "@/types"
 import { useLeagueData } from "@/data/GeneralData"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 
 export default function BottomNav({ activeCategory, setActiveCategory }: BottomNavProps) {
-  const categories = ["Ekipman", "İşçiler", "Isekai", "Özel"]
+  const categories = useMemo(() => ["Equipment", "Workers", "Isekai", "Special"], [])
   const { getLeagueColors } = useLeagueData()
   const colors = getLeagueColors(6) // Use league 6 colors for the bottom nav
 
-  const getCategoryIcon = (category: string) => {
+  const getCategoryIcon = useCallback((category: string) => {
     switch (category) {
-      case "Ekipman":
+      case "Equipment":
         return icons.pickaxe
-      case "İşçiler":
+      case "Workers":
         return icons.userGroup
       case "Isekai":
         return icons.swords
-      case "Özel":
+      case "Special":
         return icons.star
       default:
         return icons.star
     }
-  }
+  }, [])
+
+  const handleCategoryChange = useCallback(
+    (category: string) => {
+      setActiveCategory(category)
+    },
+    [setActiveCategory],
+  )
 
   return (
     <div
@@ -50,7 +58,7 @@ export default function BottomNav({ activeCategory, setActiveCategory }: BottomN
                 : "transparent",
             boxShadow: activeCategory === category ? `0 2px 8px ${colors.glow}40` : "none",
           }}
-          onClick={() => setActiveCategory(category)}
+          onClick={() => handleCategoryChange(category)}
         >
           <FontAwesomeIcon
             icon={getCategoryIcon(category)}

@@ -38,6 +38,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     return () => clearInterval(timer)
   }, [])
 
+  // Update the floating numbers logic to only show one symbol per click
   const handleButtonPress = (e: React.MouseEvent<HTMLButtonElement>) => {
     // If we're already showing effects, don't trigger again too quickly
     if (showRipple) return
@@ -55,27 +56,21 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     // Call the onClick handler passed from parent
     onClick()
 
-    // Create 3-6 floating numbers
-    const numCount = Math.floor(Math.random() * 4) + 3
-    const newNumbers: FloatingNumber[] = []
-
-    for (let i = 0; i < numCount; i++) {
-      // Random position around the button center
-      const angle = Math.random() * Math.PI * 2
-      const distance = 20 + Math.random() * 40
-      newNumbers.push({
-        id: nextId + i,
-        value: earnPerTap, // Use earnPerTap directly from context
-        x: 50 + Math.cos(angle) * distance, // percentage from center
-        y: 50 + Math.sin(angle) * distance, // percentage from center
-        opacity: 1,
-        scale: 0.8 + Math.random() * 0.4,
-        rotation: -15 + Math.random() * 30,
-      })
+    // Create just one floating number
+    const angle = Math.random() * Math.PI * 2
+    const distance = 20 + Math.random() * 40
+    const newNumber = {
+      id: nextId,
+      value: earnPerTap, // Use earnPerTap directly from context
+      x: 50 + Math.cos(angle) * distance, // percentage from center
+      y: 50 + Math.sin(angle) * distance, // percentage from center
+      opacity: 1,
+      scale: 1,
+      rotation: 0,
     }
 
-    setFloatingNumbers((prev) => [...prev, ...newNumbers])
-    setNextId(nextId + numCount)
+    setFloatingNumbers([...floatingNumbers, newNumber])
+    setNextId(nextId + 1)
 
     // Automatically reset pressed state after animation
     setTimeout(() => {
@@ -90,7 +85,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
       <div
         className="absolute w-60 h-60 rounded-full opacity-20 animate-pulse"
         style={{
-          background: `radial-gradient(circle, ${colors.secondary}80, ${colors.primary}20)`,
+          background: `radial-gradient(circle, ${colors.primary}80, ${colors.primary}20)`,
           animationDuration: "3s",
           transition: "background 0.5s ease",
         }}
@@ -100,7 +95,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
         style={{
           animationDelay: "1.5s",
           animationDuration: "2.5s",
-          background: `radial-gradient(circle, ${colors.secondary}60, ${colors.primary}10)`,
+          background: `radial-gradient(circle, ${colors.primary}60, ${colors.primary}10)`,
           transition: "background 0.5s ease",
         }}
       ></div>
@@ -119,7 +114,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
               height: `${size}px`,
               left: `calc(50% + ${Math.cos(angle) * radius}px)`,
               top: `calc(50% + ${Math.sin(angle) * radius}px)`,
-              background: `${colors.secondary}`,
+              background: `${colors.primary}`,
               boxShadow: `0 0 10px ${colors.glow}`,
               animationDuration: `${2 + (i % 3)}s`,
               zIndex: 5,
@@ -152,14 +147,14 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
       ))}
 
       <button
-        className="relative overflow-hidden z-10"
+        className="relative overflow-hidden z-10 outline-none focus:outline-none"
         onClick={handleButtonPress}
         style={{
           width: "14rem",
           height: "14rem",
           borderRadius: "50%",
-          border: `12px solid ${colors.secondary}`,
-          background: `radial-gradient(circle, ${colors.secondary}80, ${colors.primary})`,
+          border: `8px solid ${colors.primary}`,
+          background: `radial-gradient(circle, ${colors.primary}80, ${colors.primary})`,
           boxShadow: isPressed
             ? `0 0 30px ${colors.glow}, inset 0 0 25px rgba(255, 255, 255, 0.6)`
             : `0 0 20px ${colors.glow}, inset 0 0 15px rgba(255, 255, 255, 0.4)`,
@@ -170,10 +165,10 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           transform: isPressed ? "scale(0.9)" : "scale(1)",
         }}
       >
-        {/* Ripple effect */}
+        {/* Ripple effect - changed to match button color instead of white */}
         {showRipple && (
           <span
-            className="absolute bg-white rounded-full opacity-40 animate-ripple"
+            className="absolute rounded-full opacity-40 animate-ripple"
             style={{
               top: ripplePosition.y,
               left: ripplePosition.x,
@@ -181,15 +176,16 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
               height: "300px",
               marginLeft: "-150px",
               marginTop: "-150px",
+              background: colors.primary,
             }}
           />
         )}
 
-        {/* Button inner glow */}
+        {/* Button inner glow - using primary color instead of secondary */}
         <div
           className="absolute inset-0 rounded-full"
           style={{
-            background: `radial-gradient(circle, ${colors.secondary}30, transparent 70%)`,
+            background: `radial-gradient(circle, ${colors.primary}30, transparent 70%)`,
             opacity: isPressed ? 0.8 : 0.5,
             transition: "background 0.5s ease",
           }}

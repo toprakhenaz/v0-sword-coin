@@ -12,7 +12,7 @@ export default function CoinDisplay({ coins, league, onclick }: CoinDisplayProps
   return (
     <div className="flex justify-between items-center gap-3 mb-4">
       <button
-        className="w-40 flex items-center justify-center bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-full py-2 px-4 shadow-lg border-2 border-yellow-700"
+        className="w-40 flex items-center justify-center bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-full py-2 px-4 shadow-lg"
         onClick={() => {}}
       >
         <FontAwesomeIcon icon={icons.coins} className="text-yellow-300 mr-2 text-lg" />

@@ -335,3 +335,31 @@ body {
 .animate-shine {
   animation: shine 2s infinite;
 }
+
+/* Add this to the end of the file to remove outlines globally while maintaining accessibility */
+
+@layer base {
+  /* Remove all outlines by default */
+  *:focus {
+    outline: none !important;
+  }
+
+  /* Remove all yellow borders/outlines on buttons */
+  button {
+    outline: none !important;
+    border-color: inherit;
+  }
+
+  button:focus,
+  button:active,
+  button:hover {
+    outline: none !important;
+    border-color: inherit;
+  }
+
+  /* Custom focus styles for keyboard navigation - for accessibility */
+  *:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.2) !important;
+    outline-offset: 2px;
+  }
+}

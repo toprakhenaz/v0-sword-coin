@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import HeaderCard from "@/components/HeaderCard"
 import Navbar from "@/components/Navbar"
 import SkeletonLoading from "@/components/SkeletonMine"
@@ -37,14 +37,14 @@ const UpgradePopup = ({ card, onClose, onConfirm, isLoading }: UpgradePopupProps
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
       <div className="bg-gray-800 rounded-lg p-6 max-w-sm w-full border border-gray-700 shadow-xl transform transition-all">
         <div className="text-center mb-6">
-          <h3 className="text-xl font-bold text-white mb-2">{card.name} Yükselt</h3>
+          <h3 className="text-xl font-bold text-white mb-2">Upgrade {card.name}</h3>
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center">
               <img src={card.image || "/placeholder.svg"} alt={card.name} className="w-12 h-12 object-contain" />
             </div>
           </div>
           <div className="text-sm text-gray-300 mb-2">
-            Seviye {card.level} → {card.level + 1}
+            Level {card.level} → {card.level + 1}
           </div>
           <div className="flex justify-center items-center space-x-4 mb-2">
             <div className="flex items-center">
@@ -67,7 +67,7 @@ const UpgradePopup = ({ card, onClose, onConfirm, isLoading }: UpgradePopupProps
             onClick={onClose}
             className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
           >
-            İptal
+            Cancel
           </button>
           <button
             onClick={onConfirm}
@@ -77,7 +77,7 @@ const UpgradePopup = ({ card, onClose, onConfirm, isLoading }: UpgradePopupProps
             {isLoading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             ) : (
-              "Yükselt"
+              "Upgrade"
             )}
           </button>
         </div>
@@ -95,14 +95,14 @@ const SuccessPopup = ({ message, onClose }: { message: string; onClose: () => vo
           <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <FontAwesomeIcon icon={icons.check} className="text-green-500 text-3xl" />
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">Yükseltme Başarılı!</h3>
+          <h3 className="text-xl font-bold text-white mb-2">Upgrade Successful!</h3>
           <p className="text-gray-300">{message}</p>
         </div>
         <button
           onClick={onClose}
           className="w-full py-2 px-4 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white rounded-lg transition-colors"
         >
-          Tamam
+          OK
         </button>
       </div>
     </div>
@@ -112,14 +112,16 @@ const SuccessPopup = ({ message, onClose }: { message: string; onClose: () => vo
 export default function MinePage() {
   const { userId, coins, hourlyEarn, league, isLoading: userLoading, updateCoins, refreshUserData } = useUser()
 
+  // Use refs to prevent unnecessary re-renders
+  const isInitialLoadRef = useRef(true)
   const [isLoading, setIsLoading] = useState(true)
-  const [activeCategory, setActiveCategory] = useState("Ekipman")
+  const [activeCategory, setActiveCategory] = useState("Equipment")
   const [cardList, setCardList] = useState<CardItem[]>([])
   const [allCards, setAllCards] = useState<Record<string, CardItem[]>>({
-    Ekipman: [],
-    İşçiler: [],
+    Equipment: [],
+    Workers: [],
     Isekai: [],
-    Özel: [],
+    Special: [],
   })
   const [searchTerm, setSearchTerm] = useState("")
   const [sortOption, setSortOption] = useState<"level" | "income" | "cost">("level")
@@ -136,6 +138,17 @@ export default function MinePage() {
   const [timeLeft, setTimeLeft] = useState<string>("00:00:00")
   const [dailyCombo, setDailyCombo] = useState([1, 2, 3]) // Card IDs for daily combo
   const [foundCards, setFoundCards] = useState<number[]>([1]) // Found card IDs
+
+  // Map Turkish category names to English - memoize to prevent re-creation
+  const categoryMapping = useMemo(
+    () => ({
+      Ekipman: "Equipment",
+      İşçiler: "Workers",
+      Isekai: "Isekai",
+      Özel: "Special",
+    }),
+    [],
+  )
 
   // Calculate time left for daily combo
   useEffect(() => {
@@ -199,20 +212,51 @@ export default function MinePage() {
 
       // Process items into categories
       const processedCards: Record<string, CardItem[]> = {
-        Ekipman: [],
-        İşçiler: [],
+        Equipment: [],
+        Workers: [],
         Isekai: [],
-        Özel: [],
+        Special: [],
       }
 
       items.forEach((item) => {
         const userItem = userItemsMap.get(item.id)
 
+        // Map Turkish category to English
+        const englishCategory = categoryMapping[item.category] || item.category
+
+        // Translate item name if it contains Turkish characters
+        let englishName = item.name
+          .replace(/ı/g, "i")
+          .replace(/İ/g, "I")
+          .replace(/ö/g, "o")
+          .replace(/Ö/g, "O")
+          .replace(/ü/g, "u")
+          .replace(/Ü/g, "U")
+          .replace(/ş/g, "s")
+          .replace(/Ş/g, "S")
+          .replace(/ğ/g, "g")
+          .replace(/Ğ/g, "G")
+          .replace(/ç/g, "c")
+          .replace(/Ç/g, "C")
+
+        // Translate common Turkish words
+        if (englishName === "Ahşap Kılıç") englishName = "Wooden Sword"
+        if (englishName === "Demir Kılıç") englishName = "Iron Sword"
+        if (englishName === "Çelik Kılıç") englishName = "Steel Sword"
+        if (englishName === "Ejderha Kılıcı") englishName = "Dragon Sword"
+        if (englishName === "Acemi Savaşçı") englishName = "Novice Warrior"
+        if (englishName === "Tecrübeli Savaşçı") englishName = "Experienced Warrior"
+        if (englishName === "Şövalye") englishName = "Knight"
+        if (englishName === "Büyülü Kristal") englishName = "Magic Crystal"
+        if (englishName === "Ruh Taşı") englishName = "Soul Stone"
+        if (englishName === "Hazine Haritası") englishName = "Treasure Map"
+        if (englishName === "Altın Pusula") englishName = "Golden Compass"
+
         const cardItem: CardItem = {
           id: item.id,
-          name: item.name,
+          name: englishName,
           image: item.image,
-          category: item.category,
+          category: englishCategory,
           description: item.description,
           level: userItem ? userItem.level : 1,
           hourlyIncome: userItem ? userItem.hourly_income : item.base_hourly_income,
@@ -220,8 +264,8 @@ export default function MinePage() {
           userItemId: userItem ? userItem.id : undefined,
         }
 
-        if (processedCards[item.category]) {
-          processedCards[item.category].push(cardItem)
+        if (processedCards[englishCategory]) {
+          processedCards[englishCategory].push(cardItem)
         }
       })
 
@@ -237,61 +281,73 @@ export default function MinePage() {
     } finally {
       setIsLoading(false)
     }
-  }, [userId])
+  }, [userId, categoryMapping])
 
   // Load data only once when component mounts
   useEffect(() => {
-    if (userId && !userLoading) {
+    if (userId && !userLoading && isInitialLoadRef.current) {
       loadUserItems()
+      isInitialLoadRef.current = false
     }
   }, [userId, userLoading, loadUserItems])
 
-  // Update card list when category changes - without reloading data
-  useEffect(() => {
-    if (allCards[activeCategory]) {
-      let filteredCards = [...allCards[activeCategory]]
+  // Filter and sort cards when needed - use useMemo to prevent unnecessary recalculations
+  const filteredAndSortedCards = useMemo(() => {
+    if (!allCards[activeCategory]) return []
 
-      // Apply search filter
-      if (searchTerm) {
-        filteredCards = filteredCards.filter((card) => card.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    let result = [...allCards[activeCategory]]
+
+    // Apply search filter
+    if (searchTerm) {
+      result = result.filter((card) => card.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      let comparison = 0
+
+      switch (sortOption) {
+        case "level":
+          comparison = a.level - b.level
+          break
+        case "income":
+          comparison = a.hourlyIncome - b.hourlyIncome
+          break
+        case "cost":
+          comparison = a.upgradeCost - b.upgradeCost
+          break
       }
 
-      // Apply sorting
-      filteredCards.sort((a, b) => {
-        let comparison = 0
+      return sortDirection === "asc" ? comparison : -comparison
+    })
 
-        switch (sortOption) {
-          case "level":
-            comparison = a.level - b.level
-            break
-          case "income":
-            comparison = a.hourlyIncome - b.hourlyIncome
-            break
-          case "cost":
-            comparison = a.upgradeCost - b.upgradeCost
-            break
-        }
-
-        return sortDirection === "asc" ? comparison : -comparison
-      })
-
-      setCardList(filteredCards)
-    }
+    return result
   }, [allCards, activeCategory, searchTerm, sortOption, sortDirection])
 
+  // Update cardList when filtered results change
+  useEffect(() => {
+    setCardList(filteredAndSortedCards)
+  }, [filteredAndSortedCards])
+
   // Handle category change without reloading data
-  const handleCategoryChange = (category: string) => {
-    if (category !== activeCategory) {
-      setActiveCategory(category)
-    }
-  }
+  const handleCategoryChange = useCallback(
+    (category: string) => {
+      if (category !== activeCategory) {
+        setActiveCategory(category)
+      }
+    },
+    [activeCategory],
+  )
 
-  const handleUpgradeClick = (card: CardItem) => {
-    if (coins < card.upgradeCost) return
-    setSelectedCard(card)
-  }
+  const handleUpgradeClick = useCallback(
+    (card: CardItem) => {
+      if (coins < card.upgradeCost) return
+      setSelectedCard(card)
+    },
+    [coins],
+  )
 
-  const handleUpgradeConfirm = async () => {
+  const handleUpgradeConfirm = useCallback(async () => {
     if (!userId || !selectedCard || upgradeInProgress || coins < selectedCard.upgradeCost) return
 
     try {
@@ -353,39 +409,32 @@ export default function MinePage() {
         `Upgraded item ${selectedCard.id} to level ${newLevel}`,
       )
 
-      // Update card in local state
-      const updatedCardList = cardList.map((c) =>
-        c.id === selectedCard.id
-          ? {
-              ...c,
-              level: newLevel,
-              hourlyIncome: newHourlyIncome,
-              upgradeCost: newUpgradeCost,
-            }
-          : c,
-      )
-      setCardList(updatedCardList)
+      // Update all cards state with the updated card
+      setAllCards((prevAllCards) => {
+        const updatedCards = { ...prevAllCards }
 
-      // Update all cards state
-      setAllCards((prevAllCards) => ({
-        ...prevAllCards,
-        [activeCategory]: prevAllCards[activeCategory].map((c) =>
-          c.id === selectedCard.id
-            ? {
-                ...c,
-                level: newLevel,
-                hourlyIncome: newHourlyIncome,
-                upgradeCost: newUpgradeCost,
-              }
-            : c,
-        ),
-      }))
+        // Find and update the card in its category
+        if (updatedCards[selectedCard.category]) {
+          updatedCards[selectedCard.category] = updatedCards[selectedCard.category].map((c) =>
+            c.id === selectedCard.id
+              ? {
+                  ...c,
+                  level: newLevel,
+                  hourlyIncome: newHourlyIncome,
+                  upgradeCost: newUpgradeCost,
+                }
+              : c,
+          )
+        }
+
+        return updatedCards
+      })
 
       // Refresh user data in context
       await refreshUserData()
 
       // Show success popup
-      setSuccessMessage(`${selectedCard.name} seviye ${newLevel} oldu!`)
+      setSuccessMessage(`${selectedCard.name} is now level ${newLevel}!`)
       setSelectedCard(null)
       setShowSuccessPopup(true)
     } catch (error) {
@@ -393,32 +442,42 @@ export default function MinePage() {
     } finally {
       setUpgradeInProgress(false)
     }
-  }
+  }, [userId, selectedCard, upgradeInProgress, coins, updateCoins, refreshUserData])
 
-  const toggleSortOptions = () => {
-    setShowSortOptions(!showSortOptions)
-  }
+  const toggleSortOptions = useCallback(() => {
+    setShowSortOptions((prev) => !prev)
+  }, [])
 
-  const handleSort = (option: "level" | "income" | "cost") => {
-    if (sortOption === option) {
-      // Toggle direction if same option
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-    } else {
-      // Set new option with default desc direction
-      setSortOption(option)
-      setSortDirection("desc")
-    }
+  const handleSort = useCallback((option: "level" | "income" | "cost") => {
+    setSortOption((prevOption) => {
+      if (prevOption === option) {
+        // Toggle direction if same option
+        setSortDirection((prevDir) => (prevDir === "asc" ? "desc" : "asc"))
+        return prevOption
+      } else {
+        // Set new option with default desc direction
+        setSortDirection("desc")
+        return option
+      }
+    })
     setShowSortOptions(false)
-  }
+  }, [])
 
-  const getSortIcon = (option: "level" | "income" | "cost") => {
-    if (sortOption !== option) return null
-    return sortDirection === "asc" ? (
-      <FontAwesomeIcon icon={icons.chevronUp} className="ml-1 text-xs" />
-    ) : (
-      <FontAwesomeIcon icon={icons.chevronDown} className="ml-1 text-xs" />
-    )
-  }
+  const getSortIcon = useCallback(
+    (option: "level" | "income" | "cost") => {
+      if (sortOption !== option) return null
+      return sortDirection === "asc" ? (
+        <FontAwesomeIcon icon={icons.chevronUp} className="ml-1 text-xs" />
+      ) : (
+        <FontAwesomeIcon icon={icons.chevronDown} className="ml-1 text-xs" />
+      )
+    },
+    [sortOption, sortDirection],
+  )
+
+  const closeSuccessPopup = useCallback(() => {
+    setShowSuccessPopup(false)
+  }, [])
 
   if (isLoading || userLoading) {
     return <SkeletonLoading />
@@ -481,7 +540,7 @@ export default function MinePage() {
       {/* Category Tabs */}
       <div className="px-4 mb-4">
         <div className="bg-[#1f2937] rounded-full flex justify-between">
-          {["Ekipman", "İşçiler", "Isekai", "Özel"].map((category) => (
+          {["Equipment", "Workers", "Isekai", "Special"].map((category) => (
             <button
               key={category}
               className={`flex-1 py-3 text-center text-sm ${
@@ -517,9 +576,9 @@ export default function MinePage() {
                     <h3 className="font-bold text-white text-center mb-0.5 truncate text-sm">{card.name}</h3>
                     <div className="flex items-center justify-center mb-1">
                       <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-xs" />
-                      <span className="text-yellow-400 font-bold text-sm">+{card.hourlyIncome}/Saat</span>
+                      <span className="text-yellow-400 font-bold text-sm">+{card.hourlyIncome}/Hour</span>
                     </div>
-                    <div className="text-center text-gray-300 mb-1 text-xs">Seviye {card.level}</div>
+                    <div className="text-center text-gray-300 mb-1 text-xs">Level {card.level}</div>
                     <div className="mt-auto">
                       <button
                         onClick={() => handleUpgradeClick(card)}
@@ -542,11 +601,11 @@ export default function MinePage() {
             <div className="bg-[#1f2937] rounded-lg p-6 text-center">
               <FontAwesomeIcon icon={icons.search} className="text-3xl text-gray-600 mb-2" />
               <p className="text-gray-400">
-                {searchTerm ? `"${searchTerm}" için sonuç bulunamadı` : "Ekipman bulunamadı"}
+                {searchTerm ? `No results found for "${searchTerm}"` : "No equipment found"}
               </p>
               {searchTerm && (
                 <button onClick={() => setSearchTerm("")} className="mt-2 text-yellow-500 text-sm hover:underline">
-                  Aramayı temizle
+                  Clear search
                 </button>
               )}
             </div>
@@ -565,7 +624,7 @@ export default function MinePage() {
       )}
 
       {/* Success Popup */}
-      {showSuccessPopup && <SuccessPopup message={successMessage} onClose={() => setShowSuccessPopup(false)} />}
+      {showSuccessPopup && <SuccessPopup message={successMessage} onClose={closeSuccessPopup} />}
 
       <Navbar />
     </main>

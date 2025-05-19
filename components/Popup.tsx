@@ -96,15 +96,29 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
               animationDuration: "2s",
             }}
           ></div>
-          <img
-            src={image || "/placeholder.svg"}
-            alt="Popup Image"
-            className="mx-auto w-36 h-36 object-contain relative z-10 animate-pulse"
-            style={{
-              animationDuration: "3s",
-              filter: `drop-shadow(0 0 10px ${colors.glow})`,
-            }}
-          />
+          {image === "/coin.png" ? (
+            <div className="flex flex-col items-center justify-center">
+              <FontAwesomeIcon
+                icon={icons.coins}
+                className="text-yellow-300 text-6xl mb-2 animate-pulse"
+                style={{
+                  animationDuration: "3s",
+                  filter: `drop-shadow(0 0 10px ${colors.glow})`,
+                }}
+              />
+              <div className="text-2xl font-bold text-yellow-300">+{message.match(/\d[\d,.]*\s*coins/)?.[0] || ""}</div>
+            </div>
+          ) : (
+            <img
+              src={image || "/placeholder.svg"}
+              alt="Popup Image"
+              className="mx-auto w-36 h-36 object-contain relative z-10 animate-pulse"
+              style={{
+                animationDuration: "3s",
+                filter: `drop-shadow(0 0 10px ${colors.glow})`,
+              }}
+            />
+          )}
         </div>
 
         <button
