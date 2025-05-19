@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import { useLeagueData } from "@/data/GeneralData"
 import { useUser } from "@/context/UserContext"
-import UserProfile from "./UserProfile"
+import ProfileSection from "./ProfileSection"
 
 export default function HeaderCard({
   coins,
@@ -16,7 +16,7 @@ export default function HeaderCard({
   hourlyEarn?: number
 }) {
   const { getLeagueColors } = useLeagueData()
-  const { hourlyEarn: contextHourlyEarn, isAuthenticated } = useUser()
+  const { hourlyEarn: contextHourlyEarn } = useUser()
 
   // Use the hourlyEarn from props if provided, otherwise use from context
   const displayHourlyEarn = hourlyEarn !== undefined ? hourlyEarn : contextHourlyEarn
@@ -25,25 +25,23 @@ export default function HeaderCard({
   const colors = getLeagueColors(league || 6)
 
   return (
-    <>
-      {isAuthenticated && <UserProfile />}
+    <div className="bg-gray-800/60 py-3 px-4 mb-4 rounded-lg flex justify-between items-center shadow-lg backdrop-blur-sm border border-gray-700/70">
+      <div
+        className="flex items-center bg-gradient-to-r rounded-full py-2 px-4 shadow-lg transition-transform hover:scale-105 active:scale-95"
+        style={{
+          background: `linear-gradient(135deg, #b47300, #ffd700)`,
+          boxShadow: `0 4px 12px rgba(255, 215, 0, 0.3)`,
+        }}
+      >
+        <FontAwesomeIcon
+          icon={icons.coins}
+          className="text-yellow-300 mr-2 animate-pulse"
+          style={{ animationDuration: "3s" }}
+        />
+        <span className="text-white font-bold text-lg">{coins?.toLocaleString()}</span>
+      </div>
 
-      <div className="bg-gray-800/60 py-3 px-4 mb-4 rounded-lg flex justify-between items-center shadow-lg backdrop-blur-sm border border-gray-700/70">
-        <div
-          className="flex items-center bg-gradient-to-r rounded-full py-2 px-4 shadow-lg transition-transform hover:scale-105 active:scale-95"
-          style={{
-            background: `linear-gradient(135deg, #b47300, #ffd700)`,
-            boxShadow: `0 4px 12px rgba(255, 215, 0, 0.3)`,
-          }}
-        >
-          <FontAwesomeIcon
-            icon={icons.coins}
-            className="text-yellow-300 mr-2 animate-pulse"
-            style={{ animationDuration: "3s" }}
-          />
-          <span className="text-white font-bold text-lg">{coins?.toLocaleString()}</span>
-        </div>
-
+      <div className="flex items-center space-x-3">
         <div
           className="flex items-center rounded-full py-2 px-4 border transition-all hover:shadow-lg"
           style={{
@@ -58,7 +56,9 @@ export default function HeaderCard({
             <span className="text-gray-400 text-xs ml-1">/hour</span>
           </div>
         </div>
+
+        <ProfileSection />
       </div>
-    </>
+    </div>
   )
 }

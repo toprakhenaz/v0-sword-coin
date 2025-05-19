@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
+import { checkAuth, logout } from "@/app/actions/auth-actions"
 import {
   updateUserCoins,
   updateUserEnergy,
@@ -12,14 +14,6 @@ import {
   getUserDailyCombo,
   findDailyComboCard,
 } from "@/lib/db-actions"
-
-interface TelegramUserData {
-  id: string
-  username: string
-  first_name: string
-  last_name?: string
-  photo_url?: string
-}
 
 type UserContextType = {
   userId: string | null
@@ -48,8 +42,6 @@ type UserContextType = {
     maxDailyRockets: number
     energyFullUsed: boolean
   }
-  telegramUser: TelegramUserData | null
-  isAuthenticated: boolean
   updateCoins: (amount: number, transactionType: string, description?: string) => Promise<void>
   updateEnergy: (amount: number) => Promise<void>
   refreshUserData: () => Promise<void>
@@ -70,14 +62,13 @@ type UserContextType = {
     reward?: number
     message?: string
   }>
-  setTelegramUser: (user: any) => void
-  setDefaultUser: (user: any) => void
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
 
 export function UserProvider({ children }: { children: ReactNode }) {
+  const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
   const [telegramId, setTelegramId] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
@@ -93,8 +84,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [lastEnergyUpdate, setLastEnergyUpdate] = useState<Date>(new Date())
   const [comboCounter, setComboCounter] = useState(0)
   const [tapMultiplier, setTapMultiplier] = useState(1)
-  const [telegramUser, setTelegramUserState] = useState<TelegramUserData | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [dailyCombo, setDailyCombo] = useState({
     cardIds: [1, 2, 3],
     foundCardIds: [],
@@ -109,143 +98,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     maxDailyRockets: 3,
     energyFullUsed: false,
   })
-
-  const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
-  const [isLoadingRocket, setIsLoadingRocket] = useState(false)
-  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
-
-  // Set Telegram user
-  const setTelegramUser = useCallback((user: any) => {
-    if (!user) return
-
-    setTelegramUserState({
-      id: user.telegram_id || user.id.toString(),
-      username: user.username,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      photo_url: user.photo_url,
-    })
-
-    setUserId(user.id)
-    setTelegramId(user.telegram_id || user.id.toString())
-    setUsername(user.username)
-    setCoins(user.coins)
-    setEnergy(user.energy)
-    setMaxEnergy(user.max_energy)
-    setEarnPerTap(user.earn_per_tap)
-    setHourlyEarn(user.hourly_earn)
-    setLeagueState(user.league)
-    setLastEnergyUpdate(new Date(user.last_energy_regen))
-    setIsAuthenticated(true)
-
-    // Save to localStorage for session persistence
-    localStorage.setItem("telegramUser", JSON.stringify(user))
-
-    // Load user data
-    refreshUserData()
-  }, [])
-
-  // Set default user (for guest login)
-  const setDefaultUser = useCallback((user: any) => {
-    if (!user) return
-
-    setUserId(user.id)
-    setTelegramId(null)
-    setUsername(user.username)
-    setCoins(user.coins)
-    setEnergy(user.energy)
-    setMaxEnergy(user.max_energy)
-    setEarnPerTap(user.earn_per_tap)
-    setHourlyEarn(user.hourly_earn)
-    setLeagueState(user.league)
-    setLastEnergyUpdate(new Date(user.last_energy_regen))
-    setIsAuthenticated(true)
-
-    // Save to localStorage for session persistence
-    localStorage.setItem("defaultUser", JSON.stringify(user))
-
-    // Load user data
-    refreshUserData()
-  }, [])
-
-  // Logout function
-  const logout = useCallback(() => {
-    setTelegramUserState(null)
-    setUserId(null)
-    setTelegramId(null)
-    setUsername(null)
-    setIsAuthenticated(false)
-
-    // Clear localStorage
-    localStorage.removeItem("telegramUser")
-    localStorage.removeItem("defaultUser")
-
-    // Reset game state
-    setCoins(0)
-    setEnergy(0)
-    setMaxEnergy(100)
-    setEarnPerTap(1)
-    setHourlyEarn(0)
-    setLeagueState(1)
-    setBoosts({
-      multiTouch: { level: 1, cost: 2000 },
-      energyLimit: { level: 1, cost: 2000 },
-      chargeSpeed: { level: 1, cost: 2000 },
-      dailyRockets: 3,
-      maxDailyRockets: 3,
-      energyFullUsed: false,
-    })
-  }, [])
-
-  // Check for existing session on load
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // First check for telegram user
-        const savedTelegramUser = localStorage.getItem("telegramUser")
-        if (savedTelegramUser) {
-          const user = JSON.parse(savedTelegramUser)
-
-          // Verify the user exists in the database
-          const { data: existingUser } = await supabase.from("users").select("*").eq("telegram_id", user.id).single()
-
-          if (existingUser) {
-            setTelegramUser(existingUser)
-            setIsLoading(false)
-            return
-          } else {
-            // User not found in database, clear localStorage
-            localStorage.removeItem("telegramUser")
-          }
-        }
-
-        // Then check for default user
-        const savedDefaultUser = localStorage.getItem("defaultUser")
-        if (savedDefaultUser) {
-          const user = JSON.parse(savedDefaultUser)
-
-          // Verify the user exists in the database
-          const { data: existingUser } = await supabase.from("users").select("*").eq("id", user.id).single()
-
-          if (existingUser) {
-            setDefaultUser(existingUser)
-            setIsLoading(false)
-            return
-          } else {
-            // User not found in database, clear localStorage
-            localStorage.removeItem("defaultUser")
-          }
-        }
-
-        setIsLoading(false)
-      } catch (error) {
-        console.error("Error checking session:", error)
-        setIsLoading(false)
-      }
-    }
-
-    checkSession()
-  }, [setTelegramUser, setDefaultUser])
 
   // Seviyeyi değiştirmek için fonksiyon
   const setLeague = (newLeague: number) => {
@@ -283,6 +135,95 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
     }
   }
+
+  // Check authentication and initialize user data
+  useEffect(() => {
+    const initUser = async () => {
+      try {
+        // First, check authentication
+        const { authenticated, userId: authUserId, telegramId: authTelegramId } = await checkAuth()
+
+        if (!authenticated) {
+          // Redirect to login if not authenticated
+          router.push("/login")
+          return
+        }
+
+        // Set user ID and Telegram ID from authentication
+        setUserId(authUserId || null)
+        setTelegramId(authTelegramId || null)
+
+        // Seed the database if needed
+        await fetch("/api/seed")
+
+        // Fetch user data
+        if (authUserId) {
+          const { data: userData, error: userError } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", authUserId)
+            .single()
+
+          if (userError) {
+            console.error("Error fetching user data:", userError)
+            setIsLoading(false)
+            return
+          }
+
+          // Set user data
+          setUsername(userData.username)
+          setCoins(userData.coins)
+          setEnergy(userData.energy)
+          setMaxEnergy(userData.max_energy)
+          setEarnPerTap(userData.earn_per_tap)
+          setHourlyEarn(userData.hourly_earn)
+          setLeagueState(userData.league)
+          setLastEnergyUpdate(new Date(userData.last_energy_regen))
+
+          // Load user boosts
+          const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", authUserId).single()
+
+          if (userBoosts) {
+            setBoosts({
+              multiTouch: {
+                level: userBoosts.multi_touch_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
+              },
+              energyLimit: {
+                level: userBoosts.energy_limit_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
+              },
+              chargeSpeed: {
+                level: userBoosts.charge_speed_level,
+                cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
+              },
+              dailyRockets: userBoosts.daily_rockets,
+              maxDailyRockets: userBoosts.max_daily_rockets,
+              energyFullUsed: userBoosts.energy_full_used,
+            })
+          }
+
+          // Load daily combo
+          const dailyComboData = await getUserDailyCombo(authUserId)
+          if (dailyComboData) {
+            setDailyCombo({
+              cardIds: dailyComboData.card_ids,
+              foundCardIds: dailyComboData.found_card_ids,
+              reward: dailyComboData.reward,
+              isCompleted: dailyComboData.is_completed,
+            })
+          }
+        }
+
+        setIsLoading(false)
+      } catch (error) {
+        console.error("Error initializing user:", error)
+        setIsLoading(false)
+      }
+    }
+
+    initUser()
+  }, [router])
 
   // Auto regenerate energy based on time passed
   useEffect(() => {
@@ -487,7 +428,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setMaxEnergy(100 + (updatedBoosts.energyLimit.level - 1) * 500)
       } else if (boostType === "chargeSpeed") {
         updatedBoosts.chargeSpeed.level = result.newLevel || boosts.chargeSpeed.level + 1
-        updatedBoosts.chargeSpeed.cost = result.cost || Math.floor(boosts.energyLimit.cost * 1.5)
+        updatedBoosts.chargeSpeed.cost = result.cost || Math.floor(boosts.chargeSpeed.cost * 1.5)
       }
 
       setBoosts(updatedBoosts)
@@ -512,6 +453,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   // Use rocket boost
+  const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
+  const [isLoadingRocket, setIsLoadingRocket] = useState(false)
+
   const handleRocketBoost = useCallback(async () => {
     if (!userId || isLoadingRocket) return
 
@@ -533,13 +477,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [boosts, energy, maxEnergy, userId, isLoadingRocket])
 
-  const rocketBoost = useCallback(() => {
+  const rocketBoost = () => {
     return {
       result: resultRocket,
       isLoading: isLoadingRocket,
       handleRocketBoost,
     }
-  }, [resultRocket, isLoadingRocket, handleRocketBoost])
+  }
+
+  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
 
   // Use full energy boost
   const useFullEnergyBoostHandler = useCallback(async () => {
@@ -642,6 +588,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return { success: false, message: result.message || "Failed to find combo card" }
   }
 
+  // Logout function
+  const handleLogout = async () => {
+    await logout()
+    router.push("/login")
+  }
+
   return (
     <UserContext.Provider
       value={{
@@ -659,8 +611,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         previousLeague,
         dailyCombo,
         boosts,
-        telegramUser,
-        isAuthenticated,
         updateCoins: updateCoinsHandler,
         updateEnergy: updateEnergyHandler,
         refreshUserData,
@@ -671,9 +621,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         useRocketBoost: rocketBoost,
         useFullEnergyBoost: useFullEnergyBoostHandler,
         findComboCard: findComboCardHandler,
-        setTelegramUser,
-        setDefaultUser,
-        logout,
+        logout: handleLogout,
       }}
     >
       {children}
