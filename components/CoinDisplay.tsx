@@ -12,11 +12,11 @@ export default function CoinDisplay({ coins, league, onclick }: CoinDisplayProps
   return (
     <div className="flex justify-between items-center gap-3 mb-4">
       <button
-        className="flex-1 flex items-center justify-center bg-gradient-to-r from-amber-700 to-amber-800 rounded-full py-2 px-4 shadow-md"
+        className="w-40 flex items-center justify-center bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-full py-2 px-4 shadow-lg border-2 border-yellow-700"
         onClick={() => {}}
       >
-        <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
-        <span className="text-white font-bold">{coins.toLocaleString()}</span>
+        <FontAwesomeIcon icon={icons.coins} className="text-yellow-300 mr-2 text-lg" />
+        <span className="text-white font-extrabold text-lg">{coins.toLocaleString()}</span>
       </button>
 
       <button
