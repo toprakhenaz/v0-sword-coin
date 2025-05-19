@@ -8,33 +8,65 @@ export default function LoginPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
-    // Telegram WebApp'i başlat
-    if (window.Telegram && window.Telegram.WebApp) {
-      const tgWebApp = window.Telegram.WebApp
-      tgWebApp.ready()
-      tgWebApp.expand()
+    const initTelegram = async () => {
+      try {
+        // Telegram WebApp'i başlat
+        if (window.Telegram && window.Telegram.WebApp) {
+          const tgWebApp = window.Telegram.WebApp
+          tgWebApp.ready()
+          tgWebApp.expand()
 
-      // initData varsa hemen kimlik doğrulamasını yap
-      if (tgWebApp.initData) {
-        handleTelegramAuth(tgWebApp.initData)
-      } else {
-        setError("Telegram WebApp initData bulunamadı. Bu uygulama sadece Telegram içinde çalışır.")
+          // initData varsa hemen kimlik doğrulamasını yap
+          if (tgWebApp.initData) {
+            console.log("Telegram initData bulundu, kimlik doğrulama başlatılıyor")
+            await handleTelegramAuth(tgWebApp.initData)
+          } else {
+            console.log("Telegram initData bulunamadı, test modu kontrol ediliyor")
+
+            // Geliştirme modunda test verisi ile devam et
+            if (process.env.NODE_ENV === "development") {
+              console.log("Geliştirme modu: Test verisi ile kimlik doğrulama")
+              await handleTelegramAuth("test_data")
+            } else {
+              setError("Telegram WebApp initData bulunamadı. Bu uygulama sadece Telegram içinde çalışır.")
+              setIsLoading(false)
+            }
+          }
+        } else {
+          console.log("Telegram WebApp bulunamadı, test modu kontrol ediliyor")
+
+          // Geliştirme modunda test verisi ile devam et
+          if (process.env.NODE_ENV === "development") {
+            console.log("Geliştirme modu: Test verisi ile kimlik doğrulama")
+            await handleTelegramAuth("test_data")
+          } else {
+            setError("Bu uygulama sadece Telegram içinde çalışır.")
+            setIsLoading(false)
+          }
+        }
+      } catch (error) {
+        console.error("Telegram başlatma hatası:", error)
+        setError("Telegram başlatma hatası")
         setIsLoading(false)
       }
-    } else {
-      setError("Bu uygulama sadece Telegram içinde çalışır.")
-      setIsLoading(false)
     }
-  }, [router])
+
+    initTelegram()
+  }, [router, retryCount])
 
   const handleTelegramAuth = async (initData: string) => {
     try {
+      console.log("Kimlik doğrulama başlatılıyor...")
       const result = await telegramAuth(initData)
+
       if (result.success) {
+        console.log("Kimlik doğrulama başarılı, ana sayfaya yönlendiriliyor")
         router.push("/")
       } else {
+        console.error("Kimlik doğrulama başarısız:", result.error)
         setError(result.error || "Kimlik doğrulama başarısız oldu")
         setIsLoading(false)
       }
@@ -43,6 +75,12 @@ export default function LoginPage() {
       setError("Beklenmeyen bir hata oluştu")
       setIsLoading(false)
     }
+  }
+
+  const handleRetry = () => {
+    setIsLoading(true)
+    setError(null)
+    setRetryCount((prev) => prev + 1)
   }
 
   if (isLoading) {
@@ -62,7 +100,17 @@ export default function LoginPage() {
           <p className="text-gray-400">Telegram Mini App</p>
         </div>
 
-        {error && <div className="bg-red-500/20 border border-red-500 text-red-300 p-4 rounded-lg mb-6">{error}</div>}
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 text-red-300 p-4 rounded-lg mb-6">
+            <p className="mb-2">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg mt-2 w-full"
+            >
+              Tekrar Dene
+            </button>
+          </div>
+        )}
 
         <div className="text-center text-sm text-gray-500 mt-4">
           <p>Bu uygulama sadece Telegram içinde çalışır.</p>
