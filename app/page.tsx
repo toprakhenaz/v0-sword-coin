@@ -176,6 +176,14 @@ export default function Home() {
     }
   }, [comboCounter])
 
+  // Component mount olduğunda ligi 3'e ayarla
+  useEffect(() => {
+    // Component mount olduğunda ligi 3'e ayarla
+    if (league !== 3) {
+      setLeague(3)
+    }
+  }, []) // Boş dependency array ile sadece bir kez çalışacak
+
   // Game actions
   const handleTap = async () => {
     if (energy <= 0) return // Don't proceed if no energy
