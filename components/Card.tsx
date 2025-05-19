@@ -14,7 +14,9 @@ export default function Card({ card, onUpgrade, coins }: CardProps) {
 
   return (
     <div
-      className={`rounded-lg p-3 relative flex flex-col justify-between shadow-lg transition-all duration-300 ${isHovered ? "transform scale-105" : ""}`}
+      className={`rounded-lg p-3 relative flex flex-col justify-between shadow-lg transition-all duration-300 ${
+        isHovered ? "transform scale-105" : ""
+      }`}
       style={{
         background: `linear-gradient(to bottom, ${colors.primary}40, ${colors.secondary}70)`,
         boxShadow: isHovered
@@ -30,6 +32,7 @@ export default function Card({ card, onUpgrade, coins }: CardProps) {
           src={card.image || "/placeholder.svg"}
           alt={card.name}
           className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+          loading="lazy" // Add lazy loading for better performance
         />
       </div>
 
@@ -39,7 +42,8 @@ export default function Card({ card, onUpgrade, coins }: CardProps) {
         </div>
 
         <div className="text-center text-sm sm:text-base text-yellow-300 font-semibold">
-          <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1" />+{card.hourlyIncome}/Saat
+          <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1" />+{card.hourlyIncome.toLocaleString()}
+          /Saat
         </div>
 
         <div className="flex justify-center items-center mt-1">
@@ -66,9 +70,10 @@ export default function Card({ card, onUpgrade, coins }: CardProps) {
           boxShadow: isDisabled ? "none" : `0 4px 12px ${colors.glow}30`,
         }}
         disabled={isDisabled}
+        aria-disabled={isDisabled}
       >
         <FontAwesomeIcon icon={icons.coins} className="mr-2" />
-        <span className="text-lg">{card.upgradeCost}</span>
+        <span className="text-lg">{card.upgradeCost.toLocaleString()}</span>
       </button>
 
       {/* Add sparkle effect on higher level cards */}

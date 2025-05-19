@@ -47,18 +47,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Seviyeyi değiştirmek için fonksiyon
   const setLeague = (newLeague: number) => {
     if (newLeague !== league) {
-      setPreviousLeague(league)
-      setIsLevelingUp(true)
+      try {
+        setPreviousLeague(league)
+        setIsLevelingUp(true)
 
-      // Animasyon için kısa bir gecikme
-      setTimeout(() => {
-        setLeagueState(newLeague)
+        // Update database if userId exists
+        if (userId) {
+          supabase
+            .from("users")
+            .update({
+              league: newLeague,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", userId)
+            .then(({ error }) => {
+              if (error) console.error("Error updating league in database:", error)
+            })
+        }
 
-        // Animasyonu bitir
+        // Delay state update for animation
         setTimeout(() => {
-          setIsLevelingUp(false)
-        }, 1000)
-      }, 500)
+          setLeagueState(newLeague)
+
+          // End animation after transition
+          setTimeout(() => {
+            setIsLevelingUp(false)
+          }, 1000)
+        }, 500)
+      } catch (error) {
+        console.error("Error setting league:", error)
+        setIsLevelingUp(false)
+      }
     }
   }
 
@@ -228,50 +247,61 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const checkAndUpdateLeague = async (coinCount: number) => {
     if (!userId) return
 
-    // League thresholds
+    // Define league thresholds in a more structured way
     const leagueThresholds = [
-      0, // League 1 (Wooden)
-      10000, // League 2 (Bronze)
-      100000, // League 3 (Iron)
-      1000000, // League 4 (Steel)
-      10000000, // League 5 (Adamantite)
-      100000000, // League 6 (Legendary)
-      1000000000, // League 7 (Dragon)
+      { level: 1, name: "Wooden", threshold: 0 },
+      { level: 2, name: "Bronze", threshold: 10000 },
+      { level: 3, name: "Iron", threshold: 100000 },
+      { level: 4, name: "Steel", threshold: 1000000 },
+      { level: 5, name: "Adamantite", threshold: 10000000 },
+      { level: 6, name: "Legendary", threshold: 100000000 },
+      { level: 7, name: "Dragon", threshold: 1000000000 },
     ]
 
     // Determine new league
     let newLeague = 1
     for (let i = leagueThresholds.length - 1; i >= 0; i--) {
-      if (coinCount >= leagueThresholds[i]) {
-        newLeague = i + 1
+      if (coinCount >= leagueThresholds[i].threshold) {
+        newLeague = leagueThresholds[i].level
         break
       }
     }
 
-    // Update league if changed
+    // Only update if league has changed and is higher than current league
     if (newLeague > league) {
-      // Seviye atlama animasyonu için
-      setPreviousLeague(league)
-      setIsLevelingUp(true)
+      try {
+        // Set animation state first
+        setPreviousLeague(league)
+        setIsLevelingUp(true)
 
-      // Veritabanını güncelle
-      await supabase
-        .from("users")
-        .update({
-          league: newLeague,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
+        // Update database
+        const { error } = await supabase
+          .from("users")
+          .update({
+            league: newLeague,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId)
 
-      // Kısa bir gecikme ile state'i güncelle (animasyon için)
-      setTimeout(() => {
-        setLeagueState(newLeague)
-
-        // Animasyonu bitir
-        setTimeout(() => {
+        if (error) {
+          console.error("Error updating league:", error)
           setIsLevelingUp(false)
-        }, 1000)
-      }, 500)
+          return
+        }
+
+        // Update state after a short delay for animation
+        setTimeout(() => {
+          setLeagueState(newLeague)
+
+          // End animation after transition completes
+          setTimeout(() => {
+            setIsLevelingUp(false)
+          }, 1000)
+        }, 500)
+      } catch (error) {
+        console.error("Error in league promotion:", error)
+        setIsLevelingUp(false)
+      }
     }
   }
 

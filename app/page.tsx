@@ -208,7 +208,6 @@ export default function Home() {
     setTimeout(() => setShowTapEffect(false), 200)
 
     // Update coins and energy in parallel
-    // We don't need to manually update the energy state here since updateEnergy will handle it
     await Promise.all([updateCoins(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`), updateEnergy(-1)])
   }
 

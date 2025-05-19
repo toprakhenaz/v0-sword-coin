@@ -13,20 +13,24 @@ interface LevelUpAnimationProps {
   onComplete: () => void
 }
 
+// Improve the LevelUpAnimation component
 export default function LevelUpAnimation({ previousLeague, newLeague, onComplete }: LevelUpAnimationProps) {
   const { getLeagueImage, getLeagueColors, getLeagueName } = useLeagueData()
   const [step, setStep] = useState(0)
+  const [isExiting, setIsExiting] = useState(false)
 
   const prevColors = getLeagueColors(previousLeague)
   const newColors = getLeagueColors(newLeague)
 
   useEffect(() => {
-    // Animasyon adımlarını zamanla
+    // Animation steps timing
     const timer1 = setTimeout(() => setStep(1), 500)
     const timer2 = setTimeout(() => setStep(2), 1500)
     const timer3 = setTimeout(() => {
-      setStep(3)
-      onComplete()
+      setIsExiting(true)
+      setTimeout(() => {
+        onComplete()
+      }, 500) // Allow exit animation to complete
     }, 3000)
 
     return () => {
@@ -37,9 +41,13 @@ export default function LevelUpAnimation({ previousLeague, newLeague, onComplete
   }, [onComplete])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-500 ${
+        isExiting ? "opacity-0" : "opacity-100"
+      }`}
+    >
       <div
-        className="absolute inset-0 backdrop-blur-md"
+        className="absolute inset-0 backdrop-blur-md transition-all duration-500"
         style={{
           background: `radial-gradient(circle, ${newColors.primary}40, ${newColors.secondary}80)`,
         }}
@@ -47,7 +55,7 @@ export default function LevelUpAnimation({ previousLeague, newLeague, onComplete
 
       <div className="relative z-10 flex flex-col items-center">
         <AnimatePresence>
-          {step >= 0 && (
+          {step >= 0 && !isExiting && (
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -66,13 +74,14 @@ export default function LevelUpAnimation({ previousLeague, newLeague, onComplete
                   height={128}
                   className="object-contain"
                   style={{ filter: `drop-shadow(0 0 10px ${prevColors.glow})` }}
+                  priority // Add priority for important images
                 />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {step >= 1 && (
+        {step >= 1 && !isExiting && (
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1, rotate: [0, 10, -10, 0] }}
@@ -94,7 +103,7 @@ export default function LevelUpAnimation({ previousLeague, newLeague, onComplete
         )}
 
         <AnimatePresence>
-          {step >= 2 && (
+          {step >= 2 && !isExiting && (
             <motion.div
               initial={{ scale: 0.8, opacity: 0, y: 50 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -120,10 +129,11 @@ export default function LevelUpAnimation({ previousLeague, newLeague, onComplete
                     height={192}
                     className="object-contain"
                     style={{ filter: `drop-shadow(0 0 20px ${newColors.glow})` }}
+                    priority
                   />
                 </motion.div>
 
-                {/* Parçacık efektleri */}
+                {/* Particle effects */}
                 {[...Array(20)].map((_, i) => {
                   const angle = Math.random() * Math.PI * 2
                   const distance = 30 + Math.random() * 100

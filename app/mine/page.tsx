@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import HeaderCard from "@/components/HeaderCard"
 import Navbar from "@/components/Navbar"
 import SkeletonLoading from "@/components/SkeletonMine"
@@ -157,98 +157,96 @@ export default function MinePage() {
     return () => clearInterval(timer)
   }, [])
 
-  // Load user items from database
-  useEffect(() => {
-    const loadUserItems = async () => {
-      if (!userId) return
+  // Load user items from database - only once when component mounts
+  const loadUserItems = useCallback(async () => {
+    if (!userId) return
 
-      try {
-        // First, get all available items
-        const { data: items, error: itemsError } = await supabase.from("items").select("*")
+    try {
+      setIsLoading(true)
 
-        if (itemsError) {
-          console.error("Error fetching items:", itemsError)
-          setIsLoading(false)
-          return
-        }
+      // First, get all available items
+      const { data: items, error: itemsError } = await supabase.from("items").select("*")
 
-        if (!items || items.length === 0) {
-          console.error("No items found")
-          setIsLoading(false)
-          return
-        }
-
-        // Then get user's items
-        const { data: userItems, error: userItemsError } = await supabase
-          .from("user_items")
-          .select("*")
-          .eq("user_id", userId)
-
-        if (userItemsError) {
-          console.error("Error fetching user items:", userItemsError)
-        }
-
-        // Create a map of user items for quick lookup
-        const userItemsMap = new Map()
-        if (userItems) {
-          userItems.forEach((userItem) => {
-            userItemsMap.set(userItem.item_id, userItem)
-          })
-        }
-
-        // Process items into categories
-        const processedCards: Record<string, CardItem[]> = {
-          Ekipman: [],
-          İşçiler: [],
-          Isekai: [],
-          Özel: [],
-        }
-
-        items.forEach((item) => {
-          const userItem = userItemsMap.get(item.id)
-
-          const cardItem: CardItem = {
-            id: item.id,
-            name: item.name,
-            image: item.image,
-            category: item.category,
-            description: item.description,
-            level: userItem ? userItem.level : 1,
-            hourlyIncome: userItem ? userItem.hourly_income : item.base_hourly_income,
-            upgradeCost: userItem ? userItem.upgrade_cost : item.base_upgrade_cost,
-            userItemId: userItem ? userItem.id : undefined,
-          }
-
-          if (processedCards[item.category]) {
-            processedCards[item.category].push(cardItem)
-          }
-        })
-
-        // Sort cards by level
-        Object.keys(processedCards).forEach((category) => {
-          processedCards[category].sort((a, b) => b.level - a.level)
-        })
-
-        setAllCards(processedCards)
-        setCardList(processedCards[activeCategory] || [])
+      if (itemsError) {
+        console.error("Error fetching items:", itemsError)
         setIsLoading(false)
-      } catch (error) {
-        console.error("Error loading items:", error)
-        setIsLoading(false)
+        return
       }
-    }
 
+      if (!items || items.length === 0) {
+        console.error("No items found")
+        setIsLoading(false)
+        return
+      }
+
+      // Then get user's items
+      const { data: userItems, error: userItemsError } = await supabase
+        .from("user_items")
+        .select("*")
+        .eq("user_id", userId)
+
+      if (userItemsError) {
+        console.error("Error fetching user items:", userItemsError)
+      }
+
+      // Create a map of user items for quick lookup
+      const userItemsMap = new Map()
+      if (userItems) {
+        userItems.forEach((userItem) => {
+          userItemsMap.set(userItem.item_id, userItem)
+        })
+      }
+
+      // Process items into categories
+      const processedCards: Record<string, CardItem[]> = {
+        Ekipman: [],
+        İşçiler: [],
+        Isekai: [],
+        Özel: [],
+      }
+
+      items.forEach((item) => {
+        const userItem = userItemsMap.get(item.id)
+
+        const cardItem: CardItem = {
+          id: item.id,
+          name: item.name,
+          image: item.image,
+          category: item.category,
+          description: item.description,
+          level: userItem ? userItem.level : 1,
+          hourlyIncome: userItem ? userItem.hourly_income : item.base_hourly_income,
+          upgradeCost: userItem ? userItem.upgrade_cost : item.base_upgrade_cost,
+          userItemId: userItem ? userItem.id : undefined,
+        }
+
+        if (processedCards[item.category]) {
+          processedCards[item.category].push(cardItem)
+        }
+      })
+
+      // Sort cards by level
+      Object.keys(processedCards).forEach((category) => {
+        processedCards[category].sort((a, b) => b.level - a.level)
+      })
+
+      setAllCards(processedCards)
+      setCardList(processedCards[activeCategory] || [])
+    } catch (error) {
+      console.error("Error loading items:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [userId])
+
+  // Load data only once when component mounts
+  useEffect(() => {
     if (userId && !userLoading) {
       loadUserItems()
     }
-  }, [userId, userLoading, activeCategory])
+  }, [userId, userLoading, loadUserItems])
 
-  // Update card list when category changes
-  useEffect(() => {
-    setCardList(allCards[activeCategory] || [])
-  }, [activeCategory, allCards])
-
-  // Sort and filter cards
+  // Update card list when category changes - without reloading data
   useEffect(() => {
     if (allCards[activeCategory]) {
       let filteredCards = [...allCards[activeCategory]]
@@ -280,6 +278,13 @@ export default function MinePage() {
       setCardList(filteredCards)
     }
   }, [allCards, activeCategory, searchTerm, sortOption, sortDirection])
+
+  // Handle category change without reloading data
+  const handleCategoryChange = (category: string) => {
+    if (category !== activeCategory) {
+      setActiveCategory(category)
+    }
+  }
 
   const handleUpgradeClick = (card: CardItem) => {
     if (coins < card.upgradeCost) return
@@ -362,9 +367,9 @@ export default function MinePage() {
       setCardList(updatedCardList)
 
       // Update all cards state
-      setAllCards({
-        ...allCards,
-        [activeCategory]: allCards[activeCategory].map((c) =>
+      setAllCards((prevAllCards) => ({
+        ...prevAllCards,
+        [activeCategory]: prevAllCards[activeCategory].map((c) =>
           c.id === selectedCard.id
             ? {
                 ...c,
@@ -374,7 +379,7 @@ export default function MinePage() {
               }
             : c,
         ),
-      })
+      }))
 
       // Refresh user data in context
       await refreshUserData()
@@ -482,7 +487,7 @@ export default function MinePage() {
               className={`flex-1 py-3 text-center text-sm ${
                 activeCategory === category ? "text-white font-medium" : "text-gray-400"
               }`}
-              onClick={() => setActiveCategory(category)}
+              onClick={() => handleCategoryChange(category)}
             >
               {category}
             </button>
@@ -503,6 +508,7 @@ export default function MinePage() {
                       src={card.image || "/placeholder.svg?height=200&width=200&query=fantasy+weapon"}
                       alt={card.name}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                     />
                   </div>
 

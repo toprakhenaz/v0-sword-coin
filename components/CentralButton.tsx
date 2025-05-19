@@ -7,6 +7,7 @@ import { useLeagueData } from "@/data/GeneralData"
 import type { CentralButtonProps } from "@/types"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
+import { useUser } from "@/context/UserContext"
 
 interface FloatingNumber {
   id: number
@@ -19,6 +20,7 @@ interface FloatingNumber {
 }
 
 export default function CentralButton({ onClick, league }: CentralButtonProps) {
+  const { earnPerTap } = useUser()
   const [isPressed, setIsPressed] = useState(false)
   const [showRipple, setShowRipple] = useState(false)
   const [ripplePosition, setRipplePosition] = useState({ x: 0, y: 0 })
@@ -50,6 +52,9 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     setShowRipple(true)
     setIsPressed(true)
 
+    // Call the onClick handler passed from parent
+    onClick()
+
     // Create 3-6 floating numbers
     const numCount = Math.floor(Math.random() * 4) + 3
     const newNumbers: FloatingNumber[] = []
@@ -60,7 +65,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
       const distance = 20 + Math.random() * 40
       newNumbers.push({
         id: nextId + i,
-        value: 6, // This should be the earnPerTap value
+        value: earnPerTap, // Use earnPerTap directly from context
         x: 50 + Math.cos(angle) * distance, // percentage from center
         y: 50 + Math.sin(angle) * distance, // percentage from center
         opacity: 1,
@@ -71,9 +76,6 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
 
     setFloatingNumbers((prev) => [...prev, ...newNumbers])
     setNextId(nextId + numCount)
-
-    // Call the onClick handler passed from parent
-    onClick()
 
     // Automatically reset pressed state after animation
     setTimeout(() => {
