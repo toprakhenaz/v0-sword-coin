@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { cookies } from "next/headers"
 
 // Environment variables are already available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -20,5 +21,24 @@ export const supabase = (() => {
   return supabaseInstance
 })()
 
-// Server-side Supabase client creation is moved to a separate file
-// to avoid importing next/headers in client components
+// Server-side Supabase client
+export const createServerClient = () => {
+  const cookieStore = cookies()
+
+  return createClient(process.env.SUPABASE_URL || "", process.env.SUPABASE_ANON_KEY || "", {
+    auth: {
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        Cookie: cookieStore.toString(),
+      },
+    },
+  })
+}
+
+// For server components and server actions
+export async function createServerSupabaseClient() {
+  "use server"
+  return createServerClient()
+}

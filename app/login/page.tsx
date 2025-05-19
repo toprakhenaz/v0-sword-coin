@@ -8,117 +8,49 @@ export default function LoginPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
-  const [debugInfo, setDebugInfo] = useState<string[]>([])
-
-  const addDebugInfo = (info: string) => {
-    setDebugInfo((prev) => [...prev, `${new Date().toISOString().split("T")[1].split(".")[0]}: ${info}`])
-  }
 
   useEffect(() => {
-    const initTelegram = async () => {
-      try {
-        addDebugInfo("Telegram başlatılıyor...")
+    // Handle Telegram WebApp initialization
+    if (window.Telegram && window.Telegram.WebApp) {
+      const tgWebApp = window.Telegram.WebApp
+      tgWebApp.ready()
+      tgWebApp.expand()
 
-        // Önce RPC fonksiyonlarını oluşturalım
-        try {
-          addDebugInfo("RPC fonksiyonları kontrol ediliyor...")
-          const rpcResponse = await fetch("/api/setup-rpc")
-          const rpcResult = await rpcResponse.json()
-          addDebugInfo(`RPC sonucu: ${rpcResult.success ? "Başarılı" : "Başarısız"}`)
-        } catch (rpcError) {
-          addDebugInfo(`RPC hatası: ${String(rpcError)}`)
-        }
-
-        // Sonra veritabanı tablolarını oluşturalım
-        try {
-          addDebugInfo("Veritabanı tabloları kontrol ediliyor...")
-          const seedResponse = await fetch("/api/create-tables", {
-            method: "POST",
-          })
-          const seedResult = await seedResponse.json()
-          addDebugInfo(`Veritabanı sonucu: ${seedResult.success ? "Başarılı" : "Başarısız"}`)
-        } catch (seedError) {
-          addDebugInfo(`Veritabanı hatası: ${String(seedError)}`)
-        }
-
-        // Telegram WebApp'i başlat
-        if (window.Telegram && window.Telegram.WebApp) {
-          const tgWebApp = window.Telegram.WebApp
-          tgWebApp.ready()
-          tgWebApp.expand()
-          addDebugInfo("Telegram WebApp başlatıldı")
-
-          // initData varsa hemen kimlik doğrulamasını yap
-          if (tgWebApp.initData) {
-            addDebugInfo(`Telegram initData bulundu (${tgWebApp.initData.length} karakter)`)
-            await handleTelegramAuth(tgWebApp.initData)
-          } else {
-            addDebugInfo("Telegram initData bulunamadı, test modu kontrol ediliyor")
-
-            // Geliştirme modunda test verisi ile devam et
-            if (process.env.NODE_ENV === "development") {
-              addDebugInfo("Geliştirme modu: Test verisi ile kimlik doğrulama")
-              await handleTelegramAuth("test_data")
-            } else {
-              setError("Telegram WebApp initData bulunamadı. Bu uygulama sadece Telegram içinde çalışır.")
-              setIsLoading(false)
-            }
-          }
-        } else {
-          addDebugInfo("Telegram WebApp bulunamadı, test modu kontrol ediliyor")
-
-          // Geliştirme modunda test verisi ile devam et
-          if (process.env.NODE_ENV === "development") {
-            addDebugInfo("Geliştirme modu: Test verisi ile kimlik doğrulama")
-            await handleTelegramAuth("test_data")
-          } else {
-            setError("Bu uygulama sadece Telegram içinde çalışır.")
-            setIsLoading(false)
-          }
-        }
-      } catch (error) {
-        addDebugInfo(`Telegram başlatma hatası: ${String(error)}`)
-        setError("Telegram başlatma hatası")
+      // If we have initData, process authentication
+      if (tgWebApp.initData) {
+        handleTelegramAuth(tgWebApp.initData)
+      } else {
+        setError("No Telegram data available. Please open this app from Telegram.")
         setIsLoading(false)
       }
+    } else {
+      setError("This app must be opened from Telegram.")
+      setIsLoading(false)
     }
-
-    initTelegram()
-  }, [router, retryCount])
+  }, [router])
 
   const handleTelegramAuth = async (initData: string) => {
+    setIsLoading(true)
     try {
-      addDebugInfo("Kimlik doğrulama başlatılıyor...")
       const result = await telegramAuth(initData)
-
       if (result.success) {
-        addDebugInfo("Kimlik doğrulama başarılı, ana sayfaya yönlendiriliyor")
         router.push("/")
       } else {
-        addDebugInfo(`Kimlik doğrulama başarısız: ${result.error}`)
-        setError(result.error || "Kimlik doğrulama başarısız oldu")
+        setError(result.error || "Authentication failed")
         setIsLoading(false)
       }
     } catch (error) {
-      addDebugInfo(`Kimlik doğrulama sırasında hata: ${String(error)}`)
-      setError("Beklenmeyen bir hata oluştu: " + String(error))
+      console.error("Error during authentication:", error)
+      setError("An unexpected error occurred")
       setIsLoading(false)
     }
-  }
-
-  const handleRetry = () => {
-    setIsLoading(true)
-    setError(null)
-    setRetryCount((prev) => prev + 1)
-    addDebugInfo("Yeniden deneniyor...")
   }
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4">
         <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-xl">Yükleniyor...</p>
+        <p className="text-xl">Loading...</p>
       </div>
     )
   }
@@ -131,31 +63,11 @@ export default function LoginPage() {
           <p className="text-gray-400">Telegram Mini App</p>
         </div>
 
-        {error && (
-          <div className="bg-red-500/20 border border-red-500 text-red-300 p-4 rounded-lg mb-6">
-            <p className="mb-2">{error}</p>
-            <button
-              onClick={handleRetry}
-              className="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg mt-2 w-full"
-            >
-              Tekrar Dene
-            </button>
-          </div>
-        )}
+        {error && <div className="bg-red-500/20 border border-red-500 text-red-300 p-4 rounded-lg mb-6">{error}</div>}
 
         <div className="text-center text-sm text-gray-500 mt-4">
-          <p>Bu uygulama sadece Telegram içinde çalışır.</p>
-          <p>Lütfen Telegram'dan açın!</p>
-        </div>
-
-        {/* Debug bilgileri */}
-        <div className="mt-8 p-4 bg-gray-900 rounded-lg text-xs text-gray-400 max-h-60 overflow-y-auto">
-          <h3 className="font-bold mb-2">Debug Bilgileri:</h3>
-          {debugInfo.map((info, index) => (
-            <div key={index} className="mb-1">
-              {info}
-            </div>
-          ))}
+          <p>This app works only inside Telegram.</p>
+          <p>Please open it from your Telegram app.</p>
         </div>
       </div>
     </div>

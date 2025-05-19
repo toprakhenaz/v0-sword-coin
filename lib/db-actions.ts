@@ -1,6 +1,6 @@
 "use server"
 
-import { createServerClient } from "./supabase-server"
+import { createServerClient } from "./supabase"
 
 // Update user coins
 export async function updateUserCoins(userId: string, amount: number, transactionType: string, description?: string) {
@@ -23,11 +23,11 @@ export async function updateUserCoins(userId: string, amount: number, transactio
     if (updateError) throw updateError
 
     // Log transaction
-    await supabase.from("coin_transactions").insert([
+    await supabase.from("transactions").insert([
       {
         user_id: userId,
         amount,
-        type: transactionType,
+        transaction_type: transactionType,
         description: description || transactionType,
         created_at: new Date().toISOString(),
       },
@@ -142,11 +142,11 @@ export async function upgradeBoost(userId: string, boostType: string) {
     if (updateCoinsError) throw updateCoinsError
 
     // Log transaction
-    await supabase.from("coin_transactions").insert([
+    await supabase.from("transactions").insert([
       {
         user_id: userId,
         amount: -cost,
-        type: "boost_upgrade",
+        transaction_type: "boost_upgrade",
         description: `Upgraded ${boostType} to level ${newLevel}`,
         created_at: new Date().toISOString(),
       },
@@ -317,11 +317,11 @@ export async function collectHourlyEarnings(userId: string) {
     if (updateError) throw updateError
 
     // Log transaction
-    await supabase.from("coin_transactions").insert([
+    await supabase.from("transactions").insert([
       {
         user_id: userId,
         amount: userData.hourly_earn,
-        type: "hourly_collect",
+        transaction_type: "hourly_collect",
         description: "Collected hourly earnings",
         created_at: now.toISOString(),
       },
@@ -347,10 +347,10 @@ export async function getUserDailyCombo(userId: string) {
 
     // Check if user has a combo for today
     const { data: comboData, error: comboError } = await supabase
-      .from("daily_combos")
+      .from("daily_combo")
       .select("*")
       .eq("user_id", userId)
-      .eq("date", today)
+      .eq("day_date", today)
       .single()
 
     if (comboError) {
@@ -368,11 +368,11 @@ export async function getUserDailyCombo(userId: string) {
 
         // Create new combo
         const { data: newCombo, error: createError } = await supabase
-          .from("daily_combos")
+          .from("daily_combo")
           .insert([
             {
               user_id: userId,
-              date: today,
+              day_date: today,
               card_ids: cardIds,
               found_card_ids: [],
               reward,
@@ -407,10 +407,10 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
 
     // Get user's daily combo
     const { data: comboData, error: comboError } = await supabase
-      .from("daily_combos")
+      .from("daily_combo")
       .select("*")
       .eq("user_id", userId)
-      .eq("date", today)
+      .eq("day_date", today)
       .single()
 
     if (comboError) throw comboError
@@ -447,7 +447,7 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
 
     // Update combo
     const { error: updateError } = await supabase
-      .from("daily_combos")
+      .from("daily_combo")
       .update({
         found_card_ids: foundCardIds,
         is_completed: isCompleted,
@@ -479,11 +479,11 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
       if (updateCoinsError) throw updateCoinsError
 
       // Log transaction
-      await supabase.from("coin_transactions").insert([
+      await supabase.from("transactions").insert([
         {
           user_id: userId,
           amount: comboData.reward,
-          type: "daily_combo",
+          transaction_type: "daily_combo",
           description: "Completed daily combo",
           created_at: new Date().toISOString(),
         },
