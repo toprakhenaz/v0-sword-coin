@@ -176,11 +176,11 @@ export default function Home() {
     }
   }, [comboCounter])
 
-  // Component mount olduğunda ligi 3'e ayarla
+  // Component mount olduğunda ligi 7'ye ayarla
   useEffect(() => {
-    // Component mount olduğunda ligi 3'e ayarla
-    if (league !== 3) {
-      setLeague(3)
+    // Component mount olduğunda ligi 7'ye ayarla
+    if (league !== 7) {
+      setLeague(7)
     }
   }, []) // Boş dependency array ile sadece bir kez çalışacak
 

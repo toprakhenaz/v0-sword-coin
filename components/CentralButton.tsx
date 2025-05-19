@@ -85,7 +85,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
       <div
         className="absolute w-60 h-60 rounded-full opacity-20 animate-pulse"
         style={{
-          background: `radial-gradient(circle, ${colors.primary}80, ${colors.primary}20)`,
+          background: `radial-gradient(circle, ${colors.secondary}80, ${colors.secondary}20)`,
           animationDuration: "3s",
           transition: "background 0.5s ease",
         }}
@@ -95,7 +95,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
         style={{
           animationDelay: "1.5s",
           animationDuration: "2.5s",
-          background: `radial-gradient(circle, ${colors.primary}60, ${colors.primary}10)`,
+          background: `radial-gradient(circle, ${colors.secondary}60, ${colors.secondary}10)`,
           transition: "background 0.5s ease",
         }}
       ></div>
@@ -114,7 +114,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
               height: `${size}px`,
               left: `calc(50% + ${Math.cos(angle) * radius}px)`,
               top: `calc(50% + ${Math.sin(angle) * radius}px)`,
-              background: `${colors.primary}`,
+              background: `${colors.secondary}`,
               boxShadow: `0 0 10px ${colors.glow}`,
               animationDuration: `${2 + (i % 3)}s`,
               zIndex: 5,
@@ -153,8 +153,8 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           width: "14rem",
           height: "14rem",
           borderRadius: "50%",
-          border: `8px solid ${colors.primary}`,
-          background: `radial-gradient(circle, ${colors.primary}80, ${colors.primary})`,
+          border: `8px solid ${colors.secondary}`,
+          background: `radial-gradient(circle, ${colors.primary}80, ${colors.secondary})`,
           boxShadow: isPressed
             ? `0 0 30px ${colors.glow}, inset 0 0 25px rgba(255, 255, 255, 0.6)`
             : `0 0 20px ${colors.glow}, inset 0 0 15px rgba(255, 255, 255, 0.4)`,
@@ -163,9 +163,11 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           alignItems: "center",
           transition: "all 0.3s ease, background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease",
           transform: isPressed ? "scale(0.9)" : "scale(1)",
+          outline: "none",
+          borderColor: colors.secondary,
         }}
       >
-        {/* Ripple effect - changed to match button color instead of white */}
+        {/* Ripple effect */}
         {showRipple && (
           <span
             className="absolute rounded-full opacity-40 animate-ripple"
@@ -181,11 +183,11 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           />
         )}
 
-        {/* Button inner glow - using primary color instead of secondary */}
+        {/* Button inner glow */}
         <div
           className="absolute inset-0 rounded-full"
           style={{
-            background: `radial-gradient(circle, ${colors.primary}30, transparent 70%)`,
+            background: `radial-gradient(circle, ${colors.secondary}30, transparent 70%)`,
             opacity: isPressed ? 0.8 : 0.5,
             transition: "background 0.5s ease",
           }}
