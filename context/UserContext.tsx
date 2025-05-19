@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
-import { checkAuth, logout } from "@/app/actions/auth-actions"
+import { useClientAuth, clientLogout } from "@/lib/client-auth"
 import {
   updateUserCoins,
   updateUserEnergy,
@@ -69,6 +69,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined)
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const { isLoading: authLoading, userId: authUserId, telegramId: authTelegramId } = useClientAuth()
   const [userId, setUserId] = useState<string | null>(null)
   const [telegramId, setTelegramId] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
@@ -136,94 +137,89 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Check authentication and initialize user data
+  // Initialize user data when auth is complete
   useEffect(() => {
     const initUser = async () => {
+      if (authLoading) return
+
+      if (!authUserId) {
+        setIsLoading(false)
+        return
+      }
+
       try {
-        // First, check authentication
-        const { authenticated, userId: authUserId, telegramId: authTelegramId } = await checkAuth()
-
-        if (!authenticated) {
-          // Redirect to login if not authenticated
-          router.push("/login")
-          return
-        }
-
         // Set user ID and Telegram ID from authentication
-        setUserId(authUserId || null)
-        setTelegramId(authTelegramId || null)
+        setUserId(authUserId)
+        setTelegramId(authTelegramId)
 
         // Seed the database if needed
         await fetch("/api/seed")
 
         // Fetch user data
-        if (authUserId) {
-          const { data: userData, error: userError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", authUserId)
-            .single()
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", authUserId)
+          .single()
 
-          if (userError) {
-            console.error("Error fetching user data:", userError)
-            setIsLoading(false)
-            return
-          }
-
-          // Set user data
-          setUsername(userData.username)
-          setCoins(userData.coins)
-          setEnergy(userData.energy)
-          setMaxEnergy(userData.max_energy)
-          setEarnPerTap(userData.earn_per_tap)
-          setHourlyEarn(userData.hourly_earn)
-          setLeagueState(userData.league)
-          setLastEnergyUpdate(new Date(userData.last_energy_regen))
-
-          // Load user boosts
-          const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", authUserId).single()
-
-          if (userBoosts) {
-            setBoosts({
-              multiTouch: {
-                level: userBoosts.multi_touch_level,
-                cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
-              },
-              energyLimit: {
-                level: userBoosts.energy_limit_level,
-                cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
-              },
-              chargeSpeed: {
-                level: userBoosts.charge_speed_level,
-                cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
-              },
-              dailyRockets: userBoosts.daily_rockets,
-              maxDailyRockets: userBoosts.max_daily_rockets,
-              energyFullUsed: userBoosts.energy_full_used,
-            })
-          }
-
-          // Load daily combo
-          const dailyComboData = await getUserDailyCombo(authUserId)
-          if (dailyComboData) {
-            setDailyCombo({
-              cardIds: dailyComboData.card_ids,
-              foundCardIds: dailyComboData.found_card_ids,
-              reward: dailyComboData.reward,
-              isCompleted: dailyComboData.is_completed,
-            })
-          }
+        if (userError) {
+          console.error("Error fetching user data:", userError)
+          setIsLoading(false)
+          return
         }
 
-        setIsLoading(false)
+        // Set user data
+        setUsername(userData.username)
+        setCoins(userData.coins)
+        setEnergy(userData.energy)
+        setMaxEnergy(userData.max_energy)
+        setEarnPerTap(userData.earn_per_tap)
+        setHourlyEarn(userData.hourly_earn)
+        setLeagueState(userData.league)
+        setLastEnergyUpdate(new Date(userData.last_energy_regen))
+
+        // Load user boosts
+        const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", authUserId).single()
+
+        if (userBoosts) {
+          setBoosts({
+            multiTouch: {
+              level: userBoosts.multi_touch_level,
+              cost: 2000 * Math.pow(1.5, userBoosts.multi_touch_level - 1),
+            },
+            energyLimit: {
+              level: userBoosts.energy_limit_level,
+              cost: 2000 * Math.pow(1.5, userBoosts.energy_limit_level - 1),
+            },
+            chargeSpeed: {
+              level: userBoosts.charge_speed_level,
+              cost: 2000 * Math.pow(1.5, userBoosts.charge_speed_level - 1),
+            },
+            dailyRockets: userBoosts.daily_rockets,
+            maxDailyRockets: userBoosts.max_daily_rockets,
+            energyFullUsed: userBoosts.energy_full_used,
+          })
+        }
+
+        // Load daily combo
+        const dailyComboData = await getUserDailyCombo(authUserId)
+        if (dailyComboData) {
+          setDailyCombo({
+            cardIds: dailyComboData.card_ids,
+            foundCardIds: dailyComboData.found_card_ids,
+            reward: dailyComboData.reward,
+            isCompleted: dailyComboData.is_completed,
+          })
+        }
       } catch (error) {
         console.error("Error initializing user:", error)
+      } finally {
         setIsLoading(false)
       }
     }
 
     initUser()
-  }, [router])
+  }, [authLoading, authUserId, authTelegramId])
 
   // Auto regenerate energy based on time passed
   useEffect(() => {
@@ -590,7 +586,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // Logout function
   const handleLogout = async () => {
-    await logout()
+    await clientLogout()
     router.push("/login")
   }
 
@@ -606,7 +602,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         earnPerTap,
         hourlyEarn,
         league,
-        isLoading,
+        isLoading: isLoading || authLoading,
         isLevelingUp,
         previousLeague,
         dailyCombo,

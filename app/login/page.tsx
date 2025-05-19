@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { telegramAuth } from "../actions/auth-actions"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -32,7 +31,16 @@ export default function LoginPage() {
   const handleTelegramAuth = async (initData: string) => {
     setIsLoading(true)
     try {
-      const result = await telegramAuth(initData)
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ initData }),
+      })
+
+      const result = await response.json()
+
       if (result.success) {
         router.push("/")
       } else {
