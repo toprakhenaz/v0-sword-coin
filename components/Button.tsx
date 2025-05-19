@@ -10,7 +10,7 @@ export const Button: React.FC<ButtonProps> = ({ className = "", children, disabl
       ${disabled ? "cursor-not-allowed opacity-60" : "transform hover:-translate-y-1 active:translate-y-0"} 
       ${className}`}
     disabled={disabled}
-    style={{ outline: "none" }}
+    style={{ outline: "none", borderColor: "inherit" }}
     {...props}
   >
     {children}

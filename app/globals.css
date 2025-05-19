@@ -347,14 +347,14 @@ body {
   /* Remove all yellow borders/outlines on buttons */
   button {
     outline: none !important;
-    border-color: inherit;
+    border-color: inherit !important;
   }
 
   button:focus,
   button:active,
   button:hover {
     outline: none !important;
-    border-color: inherit;
+    border-color: inherit !important;
   }
 
   /* Custom focus styles for keyboard navigation - for accessibility */

@@ -31,7 +31,7 @@ export default function RefferanceRow({ referance, collectCoins, isAnimating = f
         {referance.isClaimed ? (
           <div className="px-4 py-2 bg-gray-600 text-gray-300 rounded-lg font-medium flex items-center">
             <FontAwesomeIcon icon={icons.check} className="mr-1" />
-            Alındı
+            Collected
           </div>
         ) : (
           <button
@@ -40,7 +40,7 @@ export default function RefferanceRow({ referance, collectCoins, isAnimating = f
             disabled={isAnimating}
           >
             <FontAwesomeIcon icon={icons.coins} className="mr-2" />
-            {isAnimating ? "Alınıyor..." : "Topla"}
+            {isAnimating ? "Collecting..." : "Collect"}
           </button>
         )}
       </div>

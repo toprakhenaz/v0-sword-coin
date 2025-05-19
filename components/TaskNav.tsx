@@ -6,21 +6,22 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 
 export default function TaskNav({ activeCategory, setActiveCategory }: BottomNavProps) {
-  const categories = ["Günlük", "Crypto", "Banka", "Sponsor", "Reklam"]
+  const categories = ["Daily", "Crypto", "Bank", "Sponsor", "Ads"]
+
   const { getLeagueColors } = useLeagueData()
   const colors = getLeagueColors(6) // Use league 6 colors for the bottom nav
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case "Günlük":
+      case "Daily":
         return icons.star
       case "Crypto":
         return icons.coins
-      case "Banka":
+      case "Bank":
         return icons.swords
       case "Sponsor":
         return icons.handPointer
-      case "Reklam":
+      case "Ads":
         return icons.infoCircle
       default:
         return icons.star

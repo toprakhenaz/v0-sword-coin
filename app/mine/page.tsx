@@ -150,6 +150,8 @@ export default function MinePage() {
     [],
   )
 
+  const categories = useMemo(() => ["Equipment", "Workers", "Isekai", "Special"], [])
+
   // Calculate time left for daily combo
   useEffect(() => {
     const calculateTimeLeft = () => {
@@ -540,7 +542,7 @@ export default function MinePage() {
       {/* Category Tabs */}
       <div className="px-4 mb-4">
         <div className="bg-[#1f2937] rounded-full flex justify-between">
-          {["Equipment", "Workers", "Isekai", "Special"].map((category) => (
+          {categories.map((category) => (
             <button
               key={category}
               className={`flex-1 py-3 text-center text-sm ${

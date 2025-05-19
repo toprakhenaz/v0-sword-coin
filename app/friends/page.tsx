@@ -72,20 +72,20 @@ export default function FriendsPage() {
       {showAlert && (
         <div className="mb-4">
           <Alert isGreen>
-            <AlertTitle>Başarılı!</AlertTitle>
-            <AlertDescription>Referans ödülünüz başarıyla toplandı.</AlertDescription>
+            <AlertTitle>Success!</AlertTitle>
+            <AlertDescription>Your referral reward has been successfully collected.</AlertDescription>
           </Alert>
         </div>
       )}
 
       <div className="mb-6">
         <Button className="w-full bg-gradient-to-r from-blue-500 to-blue-700 text-white" onClick={copyReferralLink}>
-          Referans Linkini Kopyala
+          Copy Referral Link
         </Button>
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-bold">Referanslarım</h2>
+        <h2 className="text-xl font-bold">My Referrals</h2>
         {referrals.map((referance) => (
           <RefferanceRow
             key={referance.referencedId}
@@ -98,13 +98,13 @@ export default function FriendsPage() {
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)}>
         <div className="text-center">
-          <h2 className="text-xl font-bold mb-4">Referans Linki Kopyalandı</h2>
-          <p className="mb-4">Referans linkini arkadaşlarınla paylaşarak ödül kazanabilirsin.</p>
+          <h2 className="text-xl font-bold mb-4">Referral Link Copied</h2>
+          <p className="mb-4">Share your referral link with friends to earn rewards.</p>
           <Button
             className="bg-gradient-to-r from-green-500 to-green-700 text-white"
             onClick={() => setShowModal(false)}
           >
-            Tamam
+            OK
           </Button>
         </div>
       </Modal>

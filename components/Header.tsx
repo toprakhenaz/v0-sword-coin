@@ -13,7 +13,7 @@ export default function Header({ earnPerTap, coinsToLevelUp, hourlyEarn }: Heade
     <div className="bg-[#0d1220] rounded-xl p-4 shadow-lg mb-4">
       <div className="flex justify-between items-center">
         <div className="flex flex-col items-center">
-          <p className="text-xs text-gray-300 mb-1">Saatlik Kazanç</p>
+          <p className="text-xs text-gray-300 mb-1">Hourly Earnings</p>
           <div className="flex items-center">
             <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-sm" />
             <span className="text-white font-bold">{hourlyEarn.toLocaleString()}</span>
@@ -21,7 +21,7 @@ export default function Header({ earnPerTap, coinsToLevelUp, hourlyEarn }: Heade
         </div>
 
         <div className="flex flex-col items-center">
-          <p className="text-xs text-gray-300 mb-1">Seviye İçin Gereken</p>
+          <p className="text-xs text-gray-300 mb-1">Required for Level</p>
           <div className="flex items-center">
             <FontAwesomeIcon icon={icons.angleDoubleUp} className="text-white mr-1 text-sm" />
             <span className="text-white font-bold">{coinsToLevelUp.toLocaleString()}</span>
@@ -29,7 +29,7 @@ export default function Header({ earnPerTap, coinsToLevelUp, hourlyEarn }: Heade
         </div>
 
         <div className="flex flex-col items-center">
-          <p className="text-xs text-gray-300 mb-1">Tıklama Başına</p>
+          <p className="text-xs text-gray-300 mb-1">Per Click</p>
           <div className="flex items-center">
             <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-sm" />
             <span className="text-white font-bold">+{earnPerTap}</span>

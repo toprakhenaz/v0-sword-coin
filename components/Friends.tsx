@@ -8,8 +8,8 @@ export default function Friends({ length }: FriendsProps) {
   return (
     <>
       <div className="text-center my-6">
-        <h1 className="text-3xl font-bold mb-2">{length} Arkadaşlar</h1>
-        <p className="text-sm text-gray-300">Bir arkadaş davet et ve bonuslar kazan</p>
+        <h1 className="text-3xl font-bold mb-2">{length} Friends</h1>
+        <p className="text-sm text-gray-300">Invite a friend and earn bonuses</p>
       </div>
 
       <div className="bg-gradient-to-r from-zinc-900 to-zinc-800 rounded-lg shadow-lg p-4 mb-6">
@@ -20,9 +20,9 @@ export default function Friends({ length }: FriendsProps) {
             </div>
           </div>
           <div>
-            <p className="text-xs text-gray-300">Arkadaşını davet et</p>
+            <p className="text-xs text-gray-300">Invite your friend</p>
             <p className="text-sm font-bold text-white">
-              Arkadaşın ve Sen <span className="text-yellow-300">2500</span> Kazansın
+              You and your friend earn <span className="text-yellow-300">2500</span>
             </p>
           </div>
         </div>
@@ -32,9 +32,9 @@ export default function Friends({ length }: FriendsProps) {
             <FontAwesomeIcon icon={icons.star} className="text-white" />
           </div>
           <div>
-            <p className="text-xs text-gray-300">Telegram Premium ile davet et</p>
+            <p className="text-xs text-gray-300">Invite with Telegram Premium</p>
             <p className="text-sm font-bold text-white">
-              Her davet ettiğinden <span className="text-purple-300">%10</span> kazan
+              Earn <span className="text-purple-300">10%</span> from each invitation
             </p>
           </div>
         </div>
