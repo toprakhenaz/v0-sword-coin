@@ -6,8 +6,11 @@ import { verifyTelegramAuth, parseTelegramAuthData } from "@/lib/telegram-auth"
 
 export async function telegramAuth(initData: string) {
   try {
+    console.log("telegramAuth başlatıldı, initData uzunluğu:", initData?.length || 0)
+
     // Parse Telegram data
     const authData = parseTelegramAuthData(initData)
+    console.log("Telegram verileri ayrıştırıldı:", authData ? "Başarılı" : "Başarısız")
 
     // Geliştirme modunda veya test sırasında doğrulamayı atla
     // Eğer authData varsa, kullanıcıyı oluştur veya güncelle
@@ -36,6 +39,8 @@ export async function telegramAuth(initData: string) {
 
     // Üretim modunda doğrulama yap
     const isValid = verifyTelegramAuth(authData)
+    console.log("Telegram doğrulama sonucu:", isValid ? "Geçerli" : "Geçersiz")
+
     if (!isValid) {
       console.log("Geçersiz Telegram verileri, ancak kullanıcı oluşturulmaya çalışılacak")
       // Doğrulama başarısız olsa bile kullanıcı oluşturmayı dene
@@ -46,7 +51,10 @@ export async function telegramAuth(initData: string) {
     return await createOrUpdateUser(authData)
   } catch (error) {
     console.error("telegramAuth içinde hata:", error)
-    return { success: false, error: "Kimlik doğrulama başarısız oldu" }
+    return {
+      success: false,
+      error: "Kimlik doğrulama başarısız oldu: " + (error instanceof Error ? error.message : String(error)),
+    }
   }
 }
 
@@ -61,21 +69,42 @@ async function createOrUpdateUser(userData: any) {
 
     console.log("Kullanıcı oluşturuluyor/güncelleniyor:", { telegramId, username })
 
+    // Önce tabloların var olduğundan emin olalım
+    try {
+      // Tablo kontrolü ve oluşturma
+      await fetch("/api/create-tables", {
+        method: "POST",
+      })
+      console.log("Tablolar kontrol edildi/oluşturuldu")
+    } catch (tableError) {
+      console.error("Tablo kontrolü sırasında hata:", tableError)
+    }
+
     // Create Supabase server client
     const supabase = createServerClient()
+    console.log("Supabase client oluşturuldu")
 
     // Check if user exists
-    const { data: existingUser, error: userError } = await supabase
+    console.log("Kullanıcı sorgulanıyor:", telegramId)
+    let { data: existingUser, error: userError } = await supabase
       .from("users")
       .select("*")
       .eq("telegram_id", telegramId)
       .single()
 
+    console.log(
+      "Kullanıcı sorgu sonucu:",
+      existingUser ? "Bulundu" : "Bulunamadı",
+      userError ? `Hata: ${userError.message}` : "",
+    )
+
     let userId
 
     if (userError) {
       console.log("Kullanıcı bulunamadı, yeni kullanıcı oluşturuluyor")
+
       // User doesn't exist, create a new one
+      console.log("Yeni kullanıcı ekleniyor:", { telegramId, username })
       const { data: newUser, error: createError } = await supabase
         .from("users")
         .insert([
@@ -100,30 +129,54 @@ async function createOrUpdateUser(userData: any) {
 
       if (createError) {
         console.error("Kullanıcı oluşturma hatası:", createError)
-        return { success: false, error: "Kullanıcı oluşturulamadı" }
+
+        // Tekrar kullanıcı sorgulayalım, belki başka bir işlem tarafından oluşturulmuştur
+        const { data: retryUser, error: retryError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("telegram_id", telegramId)
+          .single()
+
+        if (retryError) {
+          console.error("Tekrar kullanıcı sorgulama hatası:", retryError)
+          return { success: false, error: "Kullanıcı oluşturulamadı: " + createError.message }
+        }
+
+        console.log("Kullanıcı başka bir işlem tarafından oluşturulmuş olabilir, devam ediliyor")
+        existingUser = retryUser
+        userId = retryUser.id
+      } else {
+        console.log("Yeni kullanıcı oluşturuldu:", newUser?.id)
+        userId = newUser.id
+
+        // Create initial boosts for the user
+        console.log("Kullanıcı boost'ları oluşturuluyor")
+        const { error: boostError } = await supabase.from("user_boosts").insert([
+          {
+            user_id: userId,
+            multi_touch_level: 1,
+            energy_limit_level: 1,
+            charge_speed_level: 1,
+            daily_rockets: 3,
+            max_daily_rockets: 3,
+            energy_full_used: false,
+          },
+        ])
+
+        if (boostError) {
+          console.error("Boost oluşturma hatası:", boostError)
+          // Boost oluşturma hatası kritik değil, devam edebiliriz
+        } else {
+          console.log("Kullanıcı boost'ları oluşturuldu")
+        }
       }
-
-      userId = newUser.id
-
-      // Create initial boosts for the user
-      await supabase.from("user_boosts").insert([
-        {
-          user_id: userId,
-          multi_touch_level: 1,
-          energy_limit_level: 1,
-          charge_speed_level: 1,
-          daily_rockets: 3,
-          max_daily_rockets: 3,
-          energy_full_used: false,
-        },
-      ])
     } else {
-      console.log("Kullanıcı bulundu, bilgiler güncelleniyor")
+      console.log("Kullanıcı bulundu, bilgiler güncelleniyor:", existingUser.id)
       // User exists
       userId = existingUser.id
 
       // Update user data if needed
-      await supabase
+      const { error: updateError } = await supabase
         .from("users")
         .update({
           username: username,
@@ -133,9 +186,17 @@ async function createOrUpdateUser(userData: any) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId)
+
+      if (updateError) {
+        console.error("Kullanıcı güncelleme hatası:", updateError)
+        // Güncelleme hatası kritik değil, devam edebiliriz
+      } else {
+        console.log("Kullanıcı bilgileri güncellendi")
+      }
     }
 
     // Set a session cookie
+    console.log("Oturum çerezleri ayarlanıyor")
     const cookieStore = cookies()
     cookieStore.set("user_id", userId, {
       httpOnly: true,
@@ -154,7 +215,11 @@ async function createOrUpdateUser(userData: any) {
     return { success: true, userId }
   } catch (error) {
     console.error("createOrUpdateUser içinde hata:", error)
-    return { success: false, error: "Kullanıcı oluşturma/güncelleme başarısız oldu" }
+    return {
+      success: false,
+      error:
+        "Kullanıcı oluşturma/güncelleme başarısız oldu: " + (error instanceof Error ? error.message : String(error)),
+    }
   }
 }
 

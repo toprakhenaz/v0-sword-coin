@@ -9,26 +9,44 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+  const [debugInfo, setDebugInfo] = useState<string[]>([])
+
+  const addDebugInfo = (info: string) => {
+    setDebugInfo((prev) => [...prev, `${new Date().toISOString().split("T")[1].split(".")[0]}: ${info}`])
+  }
 
   useEffect(() => {
     const initTelegram = async () => {
       try {
+        addDebugInfo("Telegram başlatılıyor...")
+
+        // Önce veritabanı tablolarını oluşturalım
+        try {
+          addDebugInfo("Veritabanı tabloları kontrol ediliyor...")
+          const seedResponse = await fetch("/api/seed")
+          const seedResult = await seedResponse.json()
+          addDebugInfo(`Veritabanı sonucu: ${seedResult.success ? "Başarılı" : "Başarısız"}`)
+        } catch (seedError) {
+          addDebugInfo(`Veritabanı hatası: ${String(seedError)}`)
+        }
+
         // Telegram WebApp'i başlat
         if (window.Telegram && window.Telegram.WebApp) {
           const tgWebApp = window.Telegram.WebApp
           tgWebApp.ready()
           tgWebApp.expand()
+          addDebugInfo("Telegram WebApp başlatıldı")
 
           // initData varsa hemen kimlik doğrulamasını yap
           if (tgWebApp.initData) {
-            console.log("Telegram initData bulundu, kimlik doğrulama başlatılıyor")
+            addDebugInfo(`Telegram initData bulundu (${tgWebApp.initData.length} karakter)`)
             await handleTelegramAuth(tgWebApp.initData)
           } else {
-            console.log("Telegram initData bulunamadı, test modu kontrol ediliyor")
+            addDebugInfo("Telegram initData bulunamadı, test modu kontrol ediliyor")
 
             // Geliştirme modunda test verisi ile devam et
             if (process.env.NODE_ENV === "development") {
-              console.log("Geliştirme modu: Test verisi ile kimlik doğrulama")
+              addDebugInfo("Geliştirme modu: Test verisi ile kimlik doğrulama")
               await handleTelegramAuth("test_data")
             } else {
               setError("Telegram WebApp initData bulunamadı. Bu uygulama sadece Telegram içinde çalışır.")
@@ -36,11 +54,11 @@ export default function LoginPage() {
             }
           }
         } else {
-          console.log("Telegram WebApp bulunamadı, test modu kontrol ediliyor")
+          addDebugInfo("Telegram WebApp bulunamadı, test modu kontrol ediliyor")
 
           // Geliştirme modunda test verisi ile devam et
           if (process.env.NODE_ENV === "development") {
-            console.log("Geliştirme modu: Test verisi ile kimlik doğrulama")
+            addDebugInfo("Geliştirme modu: Test verisi ile kimlik doğrulama")
             await handleTelegramAuth("test_data")
           } else {
             setError("Bu uygulama sadece Telegram içinde çalışır.")
@@ -48,7 +66,7 @@ export default function LoginPage() {
           }
         }
       } catch (error) {
-        console.error("Telegram başlatma hatası:", error)
+        addDebugInfo(`Telegram başlatma hatası: ${String(error)}`)
         setError("Telegram başlatma hatası")
         setIsLoading(false)
       }
@@ -59,20 +77,20 @@ export default function LoginPage() {
 
   const handleTelegramAuth = async (initData: string) => {
     try {
-      console.log("Kimlik doğrulama başlatılıyor...")
+      addDebugInfo("Kimlik doğrulama başlatılıyor...")
       const result = await telegramAuth(initData)
 
       if (result.success) {
-        console.log("Kimlik doğrulama başarılı, ana sayfaya yönlendiriliyor")
+        addDebugInfo("Kimlik doğrulama başarılı, ana sayfaya yönlendiriliyor")
         router.push("/")
       } else {
-        console.error("Kimlik doğrulama başarısız:", result.error)
+        addDebugInfo(`Kimlik doğrulama başarısız: ${result.error}`)
         setError(result.error || "Kimlik doğrulama başarısız oldu")
         setIsLoading(false)
       }
     } catch (error) {
-      console.error("Kimlik doğrulama sırasında hata:", error)
-      setError("Beklenmeyen bir hata oluştu")
+      addDebugInfo(`Kimlik doğrulama sırasında hata: ${String(error)}`)
+      setError("Beklenmeyen bir hata oluştu: " + String(error))
       setIsLoading(false)
     }
   }
@@ -81,6 +99,7 @@ export default function LoginPage() {
     setIsLoading(true)
     setError(null)
     setRetryCount((prev) => prev + 1)
+    addDebugInfo("Yeniden deneniyor...")
   }
 
   if (isLoading) {
@@ -115,6 +134,16 @@ export default function LoginPage() {
         <div className="text-center text-sm text-gray-500 mt-4">
           <p>Bu uygulama sadece Telegram içinde çalışır.</p>
           <p>Lütfen Telegram'dan açın!</p>
+        </div>
+
+        {/* Debug bilgileri */}
+        <div className="mt-8 p-4 bg-gray-900 rounded-lg text-xs text-gray-400 max-h-60 overflow-y-auto">
+          <h3 className="font-bold mb-2">Debug Bilgileri:</h3>
+          {debugInfo.map((info, index) => (
+            <div key={index} className="mb-1">
+              {info}
+            </div>
+          ))}
         </div>
       </div>
     </div>
