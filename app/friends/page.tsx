@@ -19,19 +19,19 @@ export default function FriendsPage() {
     {
       referencedId: "1",
       referancedName: "Ahmet",
-      referenceAmount: 2500,
+      referenceAmount: 100000,
       isClaimed: false,
     },
     {
       referencedId: "2",
       referancedName: "Mehmet",
-      referenceAmount: 2500,
+      referenceAmount: 100000,
       isClaimed: true,
     },
     {
       referencedId: "3",
       referancedName: "Ayşe",
-      referenceAmount: 2500,
+      referenceAmount: 100000,
       isClaimed: false,
     },
   ])

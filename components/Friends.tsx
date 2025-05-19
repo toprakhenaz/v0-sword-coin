@@ -13,7 +13,7 @@ export default function Friends({ length }: FriendsProps) {
       </div>
 
       <div className="bg-gradient-to-r from-zinc-900 to-zinc-800 rounded-lg shadow-lg p-4 mb-6">
-        <div className="flex items-center mb-4">
+        <div className="flex items-center">
           <div className="w-12 h-12 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full mr-3 flex items-center justify-center shadow-lg">
             <div className="w-8 h-8 bg-yellow-300 rounded-full flex items-center justify-center">
               <FontAwesomeIcon icon={icons.userGroup} className="text-yellow-700" />
@@ -22,19 +22,7 @@ export default function Friends({ length }: FriendsProps) {
           <div>
             <p className="text-xs text-gray-300">Invite your friend</p>
             <p className="text-sm font-bold text-white">
-              You and your friend earn <span className="text-yellow-300">2500</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center">
-          <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-purple-600 rounded-full mr-3 flex items-center justify-center shadow-lg">
-            <FontAwesomeIcon icon={icons.star} className="text-white" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-300">Invite with Telegram Premium</p>
-            <p className="text-sm font-bold text-white">
-              Earn <span className="text-purple-300">10%</span> from each invitation
+              You and your friend earn <span className="text-yellow-300">100,000</span>
             </p>
           </div>
         </div>
