@@ -49,7 +49,7 @@ export async function seedItems() {
     {
       name: "Wooden Sword",
       category: "Equipment",
-      image: "/wooden-fantasy-sword.png",
+      image: "/equipment/wooden-sword.png",
       base_hourly_income: 10,
       base_upgrade_cost: 100,
       description: "A simple wooden sword. Ideal for beginners.",
@@ -57,7 +57,7 @@ export async function seedItems() {
     {
       name: "Iron Sword",
       category: "Equipment",
-      image: "/iron-fantasy-sword.png",
+      image: "/equipment/iron-sword.png",
       base_hourly_income: 30,
       base_upgrade_cost: 300,
       description: "A durable iron sword. Suitable for mid-level adventures.",
@@ -65,7 +65,7 @@ export async function seedItems() {
     {
       name: "Steel Sword",
       category: "Equipment",
-      image: "/placeholder-zrrmy.png",
+      image: "/equipment/steel-sword.png",
       base_hourly_income: 100,
       base_upgrade_cost: 1000,
       description: "A high-quality steel sword. Ideal for fighting powerful enemies.",
@@ -73,7 +73,7 @@ export async function seedItems() {
     {
       name: "Dragon Sword",
       category: "Equipment",
-      image: "/placeholder-j0tzm.png",
+      image: "/equipment/dragon-sword.png",
       base_hourly_income: 500,
       base_upgrade_cost: 5000,
       description: "A legendary dragon sword. One of the most powerful weapons.",

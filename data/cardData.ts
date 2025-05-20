@@ -2,7 +2,7 @@
 
 export const getCardImage = (cardId: number): string => {
   // This is a placeholder function - replace with actual implementation
-  return `/cards/card-${cardId}.png`
+  return `/equipment/card-${cardId}.png`
 }
 
 export const cards: Record<string, any[]> = {
@@ -10,7 +10,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 1,
       name: "Ahşap Kılıç",
-      image: "/wooden-fantasy-sword.png",
+      image: "/equipment/wooden-sword.png",
       level: 1,
       hourlyIncome: 10,
       upgradeCost: 100,
@@ -19,7 +19,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 2,
       name: "Demir Kılıç",
-      image: "/iron-fantasy-sword.png",
+      image: "/equipment/iron-sword.png",
       level: 2,
       hourlyIncome: 30,
       upgradeCost: 300,
@@ -28,7 +28,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 3,
       name: "Çelik Kılıç",
-      image: "/placeholder-zrrmy.png",
+      image: "/equipment/steel-sword.png",
       level: 3,
       hourlyIncome: 100,
       upgradeCost: 1000,
@@ -37,7 +37,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 10,
       name: "Ejderha Kılıcı",
-      image: "/placeholder-j0tzm.png",
+      image: "/equipment/dragon-sword.png",
       level: 5,
       hourlyIncome: 500,
       upgradeCost: 5000,
@@ -57,7 +57,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 5,
       name: "Tecrübeli Savaşçı",
-      image: "/placeholder.svg?height=200&width=200&query=experienced+warrior+fantasy",
+      image: "/placeholder-rksqk.png",
       level: 2,
       hourlyIncome: 60,
       upgradeCost: 600,
@@ -66,7 +66,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 11,
       name: "Şövalye",
-      image: "/placeholder.svg?height=200&width=200&query=knight+fantasy",
+      image: "/fantasy-knight.png",
       level: 3,
       hourlyIncome: 150,
       upgradeCost: 1500,
@@ -77,7 +77,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 6,
       name: "Büyülü Kristal",
-      image: "/placeholder.svg?height=200&width=200&query=magic+crystal+fantasy",
+      image: "/magic-crystal-fantasy.png",
       level: 1,
       hourlyIncome: 50,
       upgradeCost: 500,
@@ -86,7 +86,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 12,
       name: "Ruh Taşı",
-      image: "/placeholder.svg?height=200&width=200&query=soul+stone+fantasy",
+      image: "/soul-stone-fantasy.png",
       level: 2,
       hourlyIncome: 120,
       upgradeCost: 1200,
@@ -97,7 +97,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 7,
       name: "Hazine Haritası",
-      image: "/placeholder.svg?height=200&width=200&query=treasure+map+fantasy",
+      image: "/placeholder-hs0kc.png",
       level: 1,
       hourlyIncome: 40,
       upgradeCost: 400,
@@ -106,7 +106,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 13,
       name: "Altın Pusula",
-      image: "/placeholder.svg?height=200&width=200&query=golden+compass+fantasy",
+      image: "/golden-compass-fantasy.png",
       level: 2,
       hourlyIncome: 90,
       upgradeCost: 900,
