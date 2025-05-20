@@ -1123,3 +1123,32 @@ export async function resetDailyCombo() {
   // For now, we'll just return success
   return { success: true }
 }
+
+// Add this function to the existing db-actions.ts file
+
+// Get token listing countdown date
+export async function getTokenListingDate() {
+  const supabase = createServerClient()
+
+  try {
+    const { data, error } = await supabase.from("app_settings").select("value").eq("key", "token_listing_date").single()
+
+    if (error) {
+      console.error("Error fetching token listing date:", error)
+
+      // Return a default date (3 months from now) if there's an error
+      const defaultDate = new Date()
+      defaultDate.setMonth(defaultDate.getMonth() + 3)
+      return { date: defaultDate.toISOString() }
+    }
+
+    return { date: data.value }
+  } catch (error) {
+    console.error("Error in getTokenListingDate:", error)
+
+    // Return a default date (3 months from now) if there's an error
+    const defaultDate = new Date()
+    defaultDate.setMonth(defaultDate.getMonth() + 3)
+    return { date: defaultDate.toISOString() }
+  }
+}

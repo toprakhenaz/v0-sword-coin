@@ -157,7 +157,7 @@ export default function TimeBar() {
                     }}
                   >
                     <img
-                      src={getCardImage(cardId) || "/placeholder.svg?height=200&width=200&query=fantasy+weapon"}
+                      src={getCardImage(cardId) || "/placeholder.svg"}
                       alt={`Card ${cardId}`}
                       className="w-full h-full object-cover rounded-lg"
                     />

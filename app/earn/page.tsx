@@ -10,6 +10,7 @@ import { useLeagueData } from "@/data/GeneralData"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import TaskCard from "@/components/Earn/TaskCard"
+import { getTokenListingDate } from "@/lib/db-actions"
 
 interface Task {
   id: number
@@ -24,13 +25,19 @@ interface Task {
   userTaskId?: string
 }
 
+interface CountdownTime {
+  days: number
+  hours: number
+  minutes: number
+  seconds: number
+}
+
 export default function EarnPage() {
   const { userId, coins, league, isLoading: userLoading, updateCoins } = useUser()
   const { getLeagueColors } = useLeagueData()
   const leagueColors = getLeagueColors(league)
 
   const [isLoading, setIsLoading] = useState(true)
-  const [activeCategory, setActiveCategory] = useState("All")
   const [tasks, setTasks] = useState<Task[]>([])
   const [isDailyCheckedIn, setIsDailyCheckedIn] = useState(false)
   const [dailyStreak, setDailyStreak] = useState(2) // Example streak count
@@ -41,11 +48,88 @@ export default function EarnPage() {
     image: "",
   })
 
-  // Token data
-  const [totalTokens, setTotalTokens] = useState(5200)
+  // Countdown timer state
+  const [countdown, setCountdown] = useState<CountdownTime>({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  })
+  const [isLoadingCountdown, setIsLoadingCountdown] = useState(true)
 
-  // Categories
-  const categories = ["All", "Crypto", "Social", "Learn"]
+  // Fetch token listing date from database and set up countdown
+  useEffect(() => {
+    const fetchTokenListingDate = async () => {
+      try {
+        setIsLoadingCountdown(true)
+        const { date } = await getTokenListingDate()
+        const targetDate = new Date(date)
+
+        const updateCountdown = () => {
+          const now = new Date()
+          const difference = targetDate.getTime() - now.getTime()
+
+          if (difference <= 0) {
+            // Countdown finished
+            setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+            return
+          }
+
+          const days = Math.floor(difference / (1000 * 60 * 60 * 24))
+          const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+          const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
+          const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+
+          setCountdown({ days, hours, minutes, seconds })
+        }
+
+        // Update immediately
+        updateCountdown()
+        setIsLoadingCountdown(false)
+
+        // Update every second
+        const interval = setInterval(updateCountdown, 1000)
+
+        // Clean up interval
+        return () => clearInterval(interval)
+      } catch (error) {
+        console.error("Error fetching token listing date:", error)
+        setIsLoadingCountdown(false)
+
+        // Use default date (3 months from now) if there's an error
+        const defaultDate = new Date()
+        defaultDate.setMonth(defaultDate.getMonth() + 3)
+
+        const updateCountdown = () => {
+          const now = new Date()
+          const difference = defaultDate.getTime() - now.getTime()
+
+          if (difference <= 0) {
+            setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+            return
+          }
+
+          const days = Math.floor(difference / (1000 * 60 * 60 * 24))
+          const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+          const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
+          const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+
+          setCountdown({ days, hours, minutes, seconds })
+        }
+
+        // Update immediately
+        updateCountdown()
+
+        // Update every second
+        const interval = setInterval(updateCountdown, 1000)
+
+        // Clean up interval
+        return () => clearInterval(interval)
+      }
+    }
+
+    fetchTokenListingDate()
+  }, [])
 
   // Load tasks from database
   useEffect(() => {
@@ -191,9 +275,6 @@ export default function EarnPage() {
     // Add tokens to user
     await updateCoins(task.reward, "task_reward", `Completed task ${taskId}`)
 
-    // Update token balance
-    setTotalTokens(totalTokens + task.reward)
-
     // Show success popup
     setPopupData({
       title: "Task Completed!",
@@ -226,9 +307,6 @@ export default function EarnPage() {
     // Add tokens to user
     await updateCoins(dailyReward, "daily_check_in", "Daily check-in reward")
 
-    // Update token balance
-    setTotalTokens(totalTokens + dailyReward)
-
     // Show success popup
     setPopupData({
       title: "Daily Check-in Complete!",
@@ -241,7 +319,7 @@ export default function EarnPage() {
     setDailyStreak(dailyStreak + 1)
   }
 
-  const filteredTasks = activeCategory === "All" ? tasks : tasks.filter((task) => task.category === activeCategory)
+  const filteredTasks = tasks
 
   if (isLoading || userLoading) {
     return <EarnPageSkeletonLoading />
@@ -253,7 +331,7 @@ export default function EarnPage() {
 
       {/* Main content container with consistent styling */}
       <div className="px-4">
-        {/* Token Counter - Always visible, not collapsible */}
+        {/* Token Listing Countdown - Only keeping this part */}
         <div
           className="mb-4 rounded-xl overflow-hidden border border-gray-700/50"
           style={{
@@ -272,60 +350,52 @@ export default function EarnPage() {
               }}
             ></div>
 
-            <div className="flex justify-between items-center relative z-10">
-              <div className="flex items-center">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center mr-3 shadow-lg"
-                  style={{
-                    background: `linear-gradient(135deg, ${leagueColors.primary}, ${leagueColors.secondary})`,
-                    boxShadow: `0 4px 10px ${leagueColors.glow}50`,
-                  }}
-                >
-                  <FontAwesomeIcon icon={icons.coins} className="text-yellow-300 text-xl" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">Token Balance</h2>
-                  <div className="flex items-center">
-                    <span className="text-2xl font-bold text-white">{totalTokens.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Token Listing Countdown - Always visible */}
-            <div className="mt-4">
+            {/* Token Listing Countdown - Only keeping this part */}
+            <div>
               <div className="text-gray-200 text-sm mb-2 text-center">Token Listing Countdown</div>
               <div className="flex justify-center space-x-3">
-                <div className="flex flex-col items-center">
-                  <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
-                    90
-                  </div>
-                  <div className="text-xs text-gray-300 mt-1">Days</div>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
-                    12
-                  </div>
-                  <div className="text-xs text-gray-300 mt-1">Hours</div>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
-                    45
-                  </div>
-                  <div className="text-xs text-gray-300 mt-1">Mins</div>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
-                    30
-                  </div>
-                  <div className="text-xs text-gray-300 mt-1">Secs</div>
-                </div>
+                {isLoadingCountdown ? (
+                  // Loading skeleton
+                  <>
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} className="flex flex-col items-center">
+                        <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center">
+                          <div className="w-6 h-6 rounded-md bg-gray-700/70 animate-pulse"></div>
+                        </div>
+                        <div className="text-xs text-gray-300 mt-1 w-8 h-3 bg-gray-700/70 rounded animate-pulse"></div>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  // Actual countdown
+                  <>
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
+                        {countdown.days.toString().padStart(2, "0")}
+                      </div>
+                      <div className="text-xs text-gray-300 mt-1">Days</div>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
+                        {countdown.hours.toString().padStart(2, "0")}
+                      </div>
+                      <div className="text-xs text-gray-300 mt-1">Hours</div>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
+                        {countdown.minutes.toString().padStart(2, "0")}
+                      </div>
+                      <div className="text-xs text-gray-300 mt-1">Mins</div>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gray-800/70 rounded-lg w-12 h-12 flex items-center justify-center text-xl font-bold text-white">
+                        {countdown.seconds.toString().padStart(2, "0")}
+                      </div>
+                      <div className="text-xs text-gray-300 mt-1">Secs</div>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-
-            <div className="text-center mt-3">
-              <div className="text-sm text-gray-300">Exchange Listing</div>
-              <div className="text-white font-medium">Binance, KuCoin, Gate.io</div>
             </div>
           </div>
         </div>
@@ -363,34 +433,6 @@ export default function EarnPage() {
                 style={{ width: `${(dailyStreak / 7) * 100}%` }}
               ></div>
             </div>
-          </div>
-        </div>
-
-        {/* Task Categories */}
-        <div className="mb-4 overflow-x-auto scrollbar-hide">
-          <div className="flex space-x-2 p-1">
-            {categories.map((category) => (
-              <button
-                key={category}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-300 ${
-                  activeCategory === category
-                    ? "text-white shadow-lg"
-                    : "bg-gray-800/70 text-gray-300 hover:bg-gray-700/70 hover:text-white"
-                }`}
-                style={
-                  activeCategory === category
-                    ? {
-                        background: `linear-gradient(to right, ${leagueColors.primary}, ${leagueColors.secondary})`,
-                        boxShadow: `0 2px 8px ${leagueColors.glow}50`,
-                      }
-                    : {}
-                }
-                onClick={() => setActiveCategory(category)}
-              >
-                {getCategoryIcon(category)}
-                <span className="ml-1">{category}</span>
-              </button>
-            ))}
           </div>
         </div>
 

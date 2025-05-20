@@ -135,7 +135,15 @@ const CardFoundPopup = ({
           </div>
           <h3 className="text-xl font-bold text-white mb-2">Daily Combo Card Found!</h3>
           <div className="mb-4">
-            <img src={card.image || "/placeholder.svg"} alt={card.name} className="w-24 h-24 object-contain mx-auto" />
+            <img
+              src={card.image || "/placeholder.svg"}
+              alt={card.name}
+              className="w-24 h-24 object-contain mx-auto"
+              onError={(e) => {
+                // Fallback if image fails to load
+                e.currentTarget.src = "/placeholder-j0tzm.png"
+              }}
+            />
             <p className="text-white font-bold mt-2">{card.name}</p>
           </div>
           <p className="text-gray-300">You found a card from today's Daily Combo!</p>
@@ -499,7 +507,7 @@ export default function MinePage() {
           setFoundComboCard({
             id: selectedCard.id,
             name: selectedCard.name,
-            image: selectedCard.image || "/fantasy-weapon.png",
+            image: selectedCard.image || "/placeholder-j0tzm.png",
           })
           setShowCardFoundPopup(true)
         }

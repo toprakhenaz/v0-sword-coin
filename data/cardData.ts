@@ -1,8 +1,23 @@
 // Card data and utility functions
 
 export const getCardImage = (cardId: number): string => {
-  // This is a placeholder function - replace with actual implementation
-  return `/equipment/card-${cardId}.png`
+  // Map card IDs to their correct image paths based on the file structure
+  const cardImageMap: Record<number, string> = {
+    1: "/equipment/wooden-sword.png",
+    2: "/equipment/iron-sword.png",
+    3: "/equipment/steel-sword.png",
+    4: "/novice-warrior.png",
+    5: "/placeholder-zrrmy.png", // Using placeholder for now
+    6: "/magic-crystal-fantasy.png",
+    7: "/placeholder-tdma2.png", // Using placeholder for now
+    10: "/equipment/dragon-sword.png",
+    11: "/fantasy-knight.png",
+    12: "/soul-stone-fantasy.png",
+    13: "/golden-compass-fantasy.png",
+    // Add more mappings as needed
+  }
+
+  return cardImageMap[cardId] || `/placeholder-j0tzm.png`
 }
 
 export const cards: Record<string, any[]> = {
@@ -57,7 +72,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 5,
       name: "Tecrübeli Savaşçı",
-      image: "/placeholder-rksqk.png",
+      image: "/placeholder-zrrmy.png",
       level: 2,
       hourlyIncome: 60,
       upgradeCost: 600,
@@ -97,7 +112,7 @@ export const cards: Record<string, any[]> = {
     {
       id: 7,
       name: "Hazine Haritası",
-      image: "/placeholder-hs0kc.png",
+      image: "/placeholder-tdma2.png",
       level: 1,
       hourlyIncome: 40,
       upgradeCost: 400,
