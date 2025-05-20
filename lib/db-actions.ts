@@ -467,65 +467,6 @@ export async function getUserDailyRewards(userId: string) {
   return data
 }
 
-export async function claimDailyReward(userId: string, day: number) {
-  const supabase = createServerClient()
-
-  // Get reward details
-  const { data: reward, error: rewardError } = await supabase.from("daily_rewards").select("*").eq("day", day).single()
-
-  if (rewardError) {
-    console.error("Error fetching daily reward:", rewardError)
-    return { success: false, message: "Reward not found" }
-  }
-
-  // Check if already claimed
-  const { data: userReward, error: userRewardError } = await supabase
-    .from("user_daily_rewards")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("day", day)
-    .single()
-
-  if (!userRewardError && userReward && userReward.claimed) {
-    return { success: false, message: "Reward already claimed" }
-  }
-
-  // Update or insert user reward
-  if (userReward) {
-    const { error: updateError } = await supabase
-      .from("user_daily_rewards")
-      .update({
-        claimed: true,
-        claimed_at: new Date().toISOString(),
-      })
-      .eq("id", userReward.id)
-
-    if (updateError) {
-      console.error("Error claiming reward:", updateError)
-      return { success: false, message: "Error claiming reward" }
-    }
-  } else {
-    const { error: insertError } = await supabase.from("user_daily_rewards").insert([
-      {
-        user_id: userId,
-        day,
-        claimed: true,
-        claimed_at: new Date().toISOString(),
-      },
-    ])
-
-    if (insertError) {
-      console.error("Error claiming reward:", insertError)
-      return { success: false, message: "Error claiming reward" }
-    }
-  }
-
-  // Add coins to user
-  await updateUserCoins(userId, reward.reward, "daily_reward", `Claimed day ${day} reward`)
-
-  return { success: true, reward: reward.reward }
-}
-
 // Similarly update the energy function to handle rate limiting
 export async function updateUserEnergy(userId: string, amount: number) {
   const supabase = createServerClient()
@@ -1150,5 +1091,208 @@ export async function getTokenListingDate() {
     const defaultDate = new Date()
     defaultDate.setMonth(defaultDate.getMonth() + 3)
     return { date: defaultDate.toISOString() }
+  }
+}
+
+// Add these new functions at the end of the file, before the last closing brace
+
+// Replace the getUserDailyStreak function with this version that uses the user_daily_rewards table instead
+
+export async function getUserDailyStreak(userId: string) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  try {
+    // Check if user has claimed today's reward
+    const { data: todayReward, error: todayError } = await supabase
+      .from("user_daily_rewards")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("claimed_at::date", today)
+      .maybeSingle()
+
+    const canCheckIn = !todayReward
+
+    // Get user's streak by counting consecutive days
+    // Use distinct on claimed_at::date to handle potential duplicates
+    const { data: recentRewards, error: recentError } = await supabase
+      .from("user_daily_rewards")
+      .select("claimed_at")
+      .eq("user_id", userId)
+      .order("claimed_at", { ascending: false })
+      .limit(30) // Get last 30 days to calculate streak
+
+    if (recentError) {
+      console.error("Error fetching recent rewards:", recentError)
+      return { streak: 0, canCheckIn: true, lastCheckIn: null, reward: 500 }
+    }
+
+    // Calculate streak based on consecutive days
+    let streak = 0
+    if (recentRewards && recentRewards.length > 0) {
+      // Create a Set of unique dates (YYYY-MM-DD format)
+      const uniqueDates = new Set(
+        recentRewards.map((reward) => new Date(reward.claimed_at).toISOString().split("T")[0]),
+      )
+
+      // Convert to array and sort in descending order
+      const sortedDates = Array.from(uniqueDates).sort().reverse()
+
+      // Start with the most recent day
+      if (sortedDates.length > 0) {
+        let lastDate = new Date(sortedDates[0])
+        streak = 1 // Start with 1 for the most recent day
+
+        // Check for consecutive days
+        for (let i = 1; i < sortedDates.length; i++) {
+          const currentDate = new Date(sortedDates[i])
+          const dayDiff = Math.floor((lastDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))
+
+          // If the difference is 1 day, increment streak
+          if (dayDiff === 1) {
+            streak++
+            lastDate = currentDate
+          } else {
+            // Break the streak if not consecutive
+            break
+          }
+        }
+      }
+    }
+
+    // Get the reward for the current streak day
+    const nextStreakDay = (streak % 7) + 1
+    const { data: rewardData } = await supabase
+      .from("daily_rewards")
+      .select("reward")
+      .eq("day", nextStreakDay)
+      .maybeSingle()
+
+    // Default rewards if daily_rewards table doesn't exist
+    const defaultRewards = [
+      { day: 1, reward: 100 },
+      { day: 2, reward: 200 },
+      { day: 3, reward: 300 },
+      { day: 4, reward: 400 },
+      { day: 5, reward: 500 },
+      { day: 6, reward: 600 },
+      { day: 7, reward: 2000 },
+    ]
+
+    // Use default reward if table doesn't exist
+    const reward = rewardData?.reward || defaultRewards.find((r) => r.day === nextStreakDay)?.reward || 500
+
+    return {
+      streak,
+      canCheckIn,
+      lastCheckIn: recentRewards && recentRewards.length > 0 ? new Date(recentRewards[0].claimed_at) : null,
+      reward,
+    }
+  } catch (error) {
+    console.error("Error in getUserDailyStreak:", error)
+    return { streak: 0, canCheckIn: true, lastCheckIn: null, reward: 500 }
+  }
+}
+
+// Replace the claimDailyReward function with this updated version that handles the unique constraint
+
+export async function claimDailyReward(userId: string) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  try {
+    // Check if already claimed today
+    const { data: todayReward, error: todayError } = await supabase
+      .from("user_daily_rewards")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("claimed_at::date", today)
+      .maybeSingle()
+
+    if (todayReward) {
+      return { success: false, message: "Already claimed today's reward" }
+    }
+
+    // Get user's current streak
+    const { streak } = await getUserDailyStreak(userId)
+
+    // New streak will be current streak + 1
+    const newStreak = streak + 1
+
+    // Calculate which day of the week (1-7) this is
+    const streakDay = newStreak % 7 || 7 // Convert 0 to 7 for the 7th day
+
+    // Get the reward amount
+    const { data: rewardData, error: rewardError } = await supabase
+      .from("daily_rewards")
+      .select("reward")
+      .eq("day", streakDay)
+      .maybeSingle()
+
+    // Default rewards if table doesn't exist
+    const defaultRewards = [
+      { day: 1, reward: 100 },
+      { day: 2, reward: 200 },
+      { day: 3, reward: 300 },
+      { day: 4, reward: 400 },
+      { day: 5, reward: 500 },
+      { day: 6, reward: 600 },
+      { day: 7, reward: 2000 },
+    ]
+
+    const rewardAmount = rewardData?.reward || defaultRewards.find((r) => r.day === streakDay)?.reward || 500
+
+    // Check if a record already exists for this user and day
+    const { data: existingRecord, error: existingError } = await supabase
+      .from("user_daily_rewards")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("day", streakDay)
+      .maybeSingle()
+
+    // Record this claim in user_daily_rewards - either update or insert
+    if (existingRecord) {
+      // Update existing record
+      const { error: updateError } = await supabase
+        .from("user_daily_rewards")
+        .update({
+          claimed: true,
+          claimed_at: new Date().toISOString(),
+        })
+        .eq("id", existingRecord.id)
+
+      if (updateError) {
+        console.error("Error updating reward claim:", updateError)
+        return { success: false, message: "Error updating reward claim" }
+      }
+    } else {
+      // Insert new record
+      const { error: insertError } = await supabase.from("user_daily_rewards").insert([
+        {
+          user_id: userId,
+          day: streakDay,
+          claimed: true,
+          claimed_at: new Date().toISOString(),
+        },
+      ])
+
+      if (insertError) {
+        console.error("Error recording reward claim:", insertError)
+        return { success: false, message: "Error recording reward claim" }
+      }
+    }
+
+    // Add coins to user
+    await updateUserCoins(userId, rewardAmount, "daily_reward", `Day ${streakDay} streak reward`)
+
+    return {
+      success: true,
+      reward: rewardAmount,
+      streak: newStreak,
+      streakDay,
+    }
+  } catch (error) {
+    console.error("Error claiming daily reward:", error)
+    return { success: false, message: "Error processing reward claim" }
   }
 }

@@ -10,7 +10,9 @@ import { useLeagueData } from "@/data/GeneralData"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import TaskCard from "@/components/Earn/TaskCard"
-import { getTokenListingDate } from "@/lib/db-actions"
+import { getTokenListingDate, getUserDailyStreak, claimDailyReward } from "@/lib/db-actions"
+import DailyCombo from "@/components/Earn/DailyCombo"
+import { setupDailyRewardsTable } from "@/lib/setup-daily-rewards"
 
 interface Task {
   id: number
@@ -40,7 +42,9 @@ export default function EarnPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [tasks, setTasks] = useState<Task[]>([])
   const [isDailyCheckedIn, setIsDailyCheckedIn] = useState(false)
-  const [dailyStreak, setDailyStreak] = useState(2) // Example streak count
+  const [dailyStreak, setDailyStreak] = useState(0)
+  const [dailyReward, setDailyReward] = useState(500)
+  const [streakDay, setStreakDay] = useState(1)
   const [showPopup, setShowPopup] = useState(false)
   const [popupData, setPopupData] = useState({
     title: "",
@@ -130,6 +134,32 @@ export default function EarnPage() {
 
     fetchTokenListingDate()
   }, [])
+
+  useEffect(() => {
+    const loadDailyStreakInfo = async () => {
+      if (!userId) return
+
+      try {
+        const streakInfo = await getUserDailyStreak(userId)
+        setDailyStreak(streakInfo.streak)
+        setIsDailyCheckedIn(!streakInfo.canCheckIn)
+        setDailyReward(streakInfo.reward)
+        // Calculate streak day (1-7)
+        setStreakDay((streakInfo.streak % 7) + 1)
+      } catch (error) {
+        console.error("Error loading daily streak info:", error)
+        // Set defaults in case of error
+        setDailyStreak(0)
+        setIsDailyCheckedIn(false)
+        setDailyReward(100)
+        setStreakDay(1)
+      }
+    }
+
+    if (userId && !userLoading) {
+      loadDailyStreakInfo()
+    }
+  }, [userId, userLoading])
 
   // Load tasks from database
   useEffect(() => {
@@ -231,6 +261,22 @@ export default function EarnPage() {
     }
   }, [userId, userLoading])
 
+  // Add this useEffect after the other useEffects
+  useEffect(() => {
+    // Set up the daily rewards table if needed
+    const setupRewards = async () => {
+      if (userId) {
+        try {
+          await setupDailyRewardsTable()
+        } catch (error) {
+          console.error("Error setting up daily rewards:", error)
+        }
+      }
+    }
+
+    setupRewards()
+  }, [userId])
+
   const handleStartTask = async (taskId: number) => {
     // Find the task
     const task = tasks.find((t) => t.id === taskId)
@@ -298,25 +344,40 @@ export default function EarnPage() {
   const handleDailyCheckIn = async () => {
     if (isDailyCheckedIn) return
 
-    // Mark as checked in
-    setIsDailyCheckedIn(true)
+    try {
+      const result = await claimDailyReward(userId)
 
-    // Daily reward amount
-    const dailyReward = 500
+      if (result.success) {
+        // Update local state
+        setIsDailyCheckedIn(true)
+        setDailyStreak(result.streak)
+        setStreakDay(result.streakDay)
 
-    // Add tokens to user
-    await updateCoins(dailyReward, "daily_check_in", "Daily check-in reward")
-
-    // Show success popup
-    setPopupData({
-      title: "Daily Check-in Complete!",
-      message: `You earned ${dailyReward} tokens! Come back tomorrow for another reward.`,
-      image: "/coin.png",
-    })
-    setShowPopup(true)
-
-    // In a real app, you would update the streak in the database
-    setDailyStreak(dailyStreak + 1)
+        // Show success popup
+        setPopupData({
+          title: "Daily Check-in Complete!",
+          message: `You earned ${result.reward} tokens! Your streak is now ${result.streak} days.`,
+          image: "/coin.png",
+        })
+        setShowPopup(true)
+      } else {
+        // Show error popup
+        setPopupData({
+          title: "Check-in Failed",
+          message: result.message || "Failed to claim daily reward.",
+          image: "/coin.png",
+        })
+        setShowPopup(true)
+      }
+    } catch (error) {
+      console.error("Error claiming daily reward:", error)
+      setPopupData({
+        title: "Check-in Failed",
+        message: "An error occurred while claiming your reward.",
+        image: "/coin.png",
+      })
+      setShowPopup(true)
+    }
   }
 
   const filteredTasks = tasks
@@ -400,41 +461,14 @@ export default function EarnPage() {
           </div>
         </div>
 
-        {/* Daily Reward - Using league colors */}
-        <div
-          className="mb-4 rounded-xl overflow-hidden"
-          style={{
-            background: `linear-gradient(to right, ${leagueColors.primary}, ${leagueColors.secondary})`,
-            boxShadow: `0 4px 12px ${leagueColors.glow}40`,
-          }}
-        >
-          <div className="p-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold text-white">Günlük Ödül</h2>
-                <p className="text-sm text-white/80">Streak: {dailyStreak} gün</p>
-              </div>
-              <button
-                onClick={handleDailyCheckIn}
-                disabled={isDailyCheckedIn}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  isDailyCheckedIn ? "bg-gray-700/50 text-gray-400 cursor-not-allowed" : "bg-yellow-300 text-yellow-900"
-                }`}
-              >
-                <FontAwesomeIcon icon={icons.gift} className="mr-2" />
-                {isDailyCheckedIn ? "Alındı" : "Ödülü Al"}
-              </button>
-            </div>
-
-            {/* Progress bar */}
-            <div className="mt-3 relative h-2 bg-white/30 rounded-full overflow-hidden">
-              <div
-                className="absolute h-full left-0 top-0 rounded-full bg-blue-500"
-                style={{ width: `${(dailyStreak / 7) * 100}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
+        <DailyCombo
+          reward={dailyReward}
+          isCheckedIn={isDailyCheckedIn}
+          onCheckIn={handleDailyCheckIn}
+          league={league}
+          streak={dailyStreak}
+          streakDay={streakDay}
+        />
 
         {/* Tasks Section with New Task Card Design */}
         <div className="mb-6">
