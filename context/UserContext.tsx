@@ -65,7 +65,7 @@ type UserContextType = {
     maxDailyRockets: number
     energyFullUsed: boolean
   }
-  updateCoins: (amount: number, transactionType: string, description?: string) => Promise<void>
+  updateCoins: (amount: number, transactionType: string, description?: string) => Promise<boolean>
   updateEnergy: (amount: number) => Promise<void>
   refreshUserData: () => Promise<void>
   setLeague: (league: number) => void
@@ -125,7 +125,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [isLoadingRocket, setIsLoadingRocket] = useState(false)
 
   // Full energy boost state
-  const [resultFullEnergy, setResultFullEnergy] = useState<{ success: boolean; message?: string } | null>(null)
   const [fullEnergyBoostResult, setFullEnergyBoostResult] = useState<{ success: boolean; message?: string } | null>(
     null,
   )
@@ -150,12 +149,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setPreviousLeague(league)
         setIsLevelingUp(true)
 
+        // Calculate league progression benefits
+        // - Higher league means higher earnings per tap and more max energy
+        const newEarnPerTap = Math.max(1, Math.floor(newLeague * 1.5))
+        const newMaxEnergy = Math.max(100, 100 + (newLeague - 1) * 50)
+
         // Update database if userId exists
         if (userId) {
           supabase
             .from("users")
             .update({
               league: newLeague,
+              earn_per_tap: newEarnPerTap,
+              max_energy: newMaxEnergy,
               updated_at: new Date().toISOString(),
             })
             .eq("id", userId)
@@ -167,6 +173,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // Delay state update for animation
         setTimeout(() => {
           setLeagueState(newLeague)
+          setEarnPerTap(newEarnPerTap)
+          setMaxEnergy(newMaxEnergy)
 
           // End animation after transition
           setTimeout(() => {
@@ -590,7 +598,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // Update coins in state and database with debouncing
   const updateCoinsHandler = async (amount: number, transactionType: string, description?: string) => {
-    if (!userId) return
+    if (!userId) return false
+
+    // For negative amounts (spending), check if user has enough coins
+    if (amount < 0 && coins + amount < 0) {
+      console.log("Not enough coins for this transaction")
+      return false // Return false to indicate failure
+    }
 
     // Update local state immediately for responsive UI
     const newCoins = coins + amount
@@ -613,6 +627,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (amount > 0) {
       checkAndUpdateLeague(newCoins)
     }
+
+    return true // Return true to indicate success
   }
 
   // Check and update league based on coin count
@@ -657,27 +673,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
     lastTapTime.current = now
 
-    // Immediately update UI state first for responsive feedback
-    const newCombo = comboCounter + 1
-    setComboCounter(newCombo)
+    // Only update combo and show effects if energy is available
+    if (energy > 0) {
+      // Immediately update UI state first for responsive feedback
+      const newCombo = comboCounter + 1
+      setComboCounter(newCombo)
 
-    // Calculate tap multiplier
-    let multiplier = 1
-    if (newCombo > 50)
-      multiplier = 3 // Max multiplier is 3x
-    else if (newCombo > 25) multiplier = 2
-    else if (newCombo > 10) multiplier = 1.5
+      // Calculate tap multiplier
+      let multiplier = 1
+      if (newCombo > 50)
+        multiplier = 3 // Max multiplier is 3x
+      else if (newCombo > 25) multiplier = 2
+      else if (newCombo > 10) multiplier = 1.5
 
-    setTapMultiplier(multiplier)
+      setTapMultiplier(multiplier)
 
-    // Calculate coins to earn
-    const coinsToEarn = Math.round(earnPerTap * multiplier)
+      // Calculate coins to earn
+      const coinsToEarn = Math.round(earnPerTap * multiplier)
 
-    // Update coins through the queue system
-    await updateCoinsHandler(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`)
+      // Update coins through the queue system
+      await updateCoinsHandler(coinsToEarn, "tap", `Earned from tapping (${multiplier}x combo)`)
 
-    // Update energy through the queue system
-    await updateEnergyHandler(-1)
+      // Update energy through the queue system
+      await updateEnergyHandler(-1)
+    }
   }
 
   // Collect hourly earnings
@@ -739,54 +758,64 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   // Use rocket boost
-  const handleRocketBoost = useCallback(async () => {
-    if (!userId || isLoadingRocket) return
+  const [handleRocketBoost, setHandleRocketBoost] = useState<() => Promise<void>>(() => async () => {})
+  useEffect(() => {
+    const memoizedHandleRocketBoost = async () => {
+      if (!userId || isLoadingRocket) return
 
-    setIsLoadingRocket(true)
-    try {
-      const boostResult = await useRocketBoost(userId)
-      setResultRocket(boostResult)
+      setIsLoadingRocket(true)
+      try {
+        const boostResult = await useRocketBoost(userId)
+        setResultRocket(boostResult)
 
-      if (boostResult.success) {
-        // Update local state
-        setBoosts({
-          ...boosts,
-          dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
-        })
-        setEnergy(Math.min(maxEnergy, energy + 500))
+        if (boostResult.success) {
+          // Update local state
+          setBoosts({
+            ...boosts,
+            dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
+          })
+          setEnergy(Math.min(maxEnergy, energy + 500))
+        }
+      } finally {
+        setIsLoadingRocket(false)
       }
-    } finally {
-      setIsLoadingRocket(false)
     }
+    setHandleRocketBoost(() => memoizedHandleRocketBoost)
   }, [boosts, energy, maxEnergy, userId, isLoadingRocket])
 
   const rocketBoost = useCallback(() => {
     return {
       result: resultRocket,
       isLoading: isLoadingRocket,
-      handleRocketBoost,
+      handleRocketBoost: handleRocketBoost,
     }
   }, [resultRocket, isLoadingRocket, handleRocketBoost])
 
   // Use full energy boost
-  const useFullEnergyBoostHandler = useCallback(async () => {
-    if (!userId) return { success: false, message: "User not found" }
+  const [useFullEnergyBoostHandler, setUseFullEnergyBoostHandler] = useState<
+    () => Promise<{ success: boolean; message?: string }>
+  >(() => async () => ({ success: false }))
+  useEffect(() => {
+    const memoizedUseFullEnergyBoostHandler = async () => {
+      if (!userId) return { success: false, message: "User not found" }
 
-    const result = await useFullEnergyBoost(userId)
-    setFullEnergyBoostResult(result)
+      const result = await useFullEnergyBoost(userId)
+      setFullEnergyBoostResult(result)
 
-    if (result.success) {
-      // Update local state
-      setBoosts({
-        ...boosts,
-        energyFullUsed: true,
-      })
-      setEnergy(maxEnergy)
+      if (result.success) {
+        // Update local state
+        setBoosts({
+          ...boosts,
+          energyFullUsed: true,
+        })
+        setEnergy(maxEnergy)
 
-      return { success: true }
+        return { success: true }
+      }
+
+      return { success: false, message: result.message || "Failed to use full energy boost" }
     }
-
-    return { success: false, message: result.message || "Failed to use full energy boost" }
+    setUseFullEnergyBoostHandler(() => memoizedUseFullEnergyBoostHandler)
   }, [boosts, energy, maxEnergy, userId])
 
   // Enhanced refreshUserData function to ensure hourly earnings are updated

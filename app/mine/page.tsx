@@ -351,7 +351,16 @@ export default function MinePage() {
   )
 
   const handleUpgradeConfirm = useCallback(async () => {
-    if (!userId || !selectedCard || upgradeInProgress || coins < selectedCard.upgradeCost) return
+    if (!userId || !selectedCard || upgradeInProgress) return
+
+    // Check if user has enough coins
+    if (coins < selectedCard.upgradeCost) {
+      // Show a message or alert that user doesn't have enough coins
+      setSuccessMessage("Not enough coins to upgrade this item!")
+      setShowSuccessPopup(true)
+      setSelectedCard(null)
+      return
+    }
 
     try {
       setUpgradeInProgress(true)
@@ -405,12 +414,21 @@ export default function MinePage() {
         return
       }
 
-      // Deduct coins from user
-      await updateCoins(
+      // Deduct coins from user - check for success
+      const success = await updateCoins(
         -selectedCard.upgradeCost,
         "item_upgrade",
         `Upgraded item ${selectedCard.id} to level ${newLevel}`,
       )
+
+      if (!success) {
+        // If update fails (not enough coins), show error message
+        setSuccessMessage("Transaction failed. Not enough coins!")
+        setShowSuccessPopup(true)
+        setSelectedCard(null)
+        setUpgradeInProgress(false)
+        return
+      }
 
       // Update all cards state with the updated card
       setAllCards((prevAllCards) => {

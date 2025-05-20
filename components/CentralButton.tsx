@@ -20,7 +20,7 @@ interface FloatingNumber {
 }
 
 export default function CentralButton({ onClick, league }: CentralButtonProps) {
-  const { earnPerTap } = useUser()
+  const { earnPerTap, energy } = useUser()
   const [isPressed, setIsPressed] = useState(false)
   const [showRipple, setShowRipple] = useState(false)
   const [ripplePosition, setRipplePosition] = useState({ x: 0, y: 0 })
@@ -28,6 +28,9 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
   const [nextId, setNextId] = useState(0)
   const { getLeagueImage, getLeagueColors } = useLeagueData()
   const colors = getLeagueColors(league)
+
+  // Check if energy is depleted
+  const isEnergyDepleted = energy <= 0
 
   // Clean up old floating numbers
   useEffect(() => {
@@ -40,6 +43,12 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
 
   // Handle button press with touch and click support
   const handleButtonPress = (e: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
+    // If energy is depleted, just call onClick without effects
+    if (isEnergyDepleted) {
+      onClick()
+      return
+    }
+
     // If we're already showing effects, don't trigger again too quickly
     if (showRipple) return
 
@@ -100,70 +109,75 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
 
   return (
     <div className="flex items-center justify-center relative">
-      {/* Pulsating rings animation */}
-      <div
-        className="absolute w-60 h-60 rounded-full opacity-20 animate-pulse"
-        style={{
-          background: `radial-gradient(circle, ${colors.secondary}80, ${colors.secondary}20)`,
-          animationDuration: "3s",
-          transition: "background 0.5s ease",
-        }}
-      ></div>
-      <div
-        className="absolute w-52 h-52 rounded-full opacity-15 animate-pulse"
-        style={{
-          animationDelay: "1.5s",
-          animationDuration: "2.5s",
-          background: `radial-gradient(circle, ${colors.secondary}60, ${colors.secondary}10)`,
-          transition: "background 0.5s ease",
-        }}
-      ></div>
-
-      {/* Particles around the button */}
-      {[...Array(12)].map((_, i) => {
-        const angle = (i / 12) * Math.PI * 2
-        const radius = 140 + Math.sin(Date.now() / 1000 + i) * 10
-        const size = 2 + Math.random() * 4
-        return (
+      {/* Pulsating rings animation - only shown when energy is available */}
+      {!isEnergyDepleted && (
+        <>
           <div
-            key={i}
-            className="absolute rounded-full animate-pulse"
+            className="absolute w-60 h-60 rounded-full opacity-20 animate-pulse"
             style={{
-              width: `${size}px`,
-              height: `${size}px`,
-              left: `calc(50% + ${Math.cos(angle) * radius}px)`,
-              top: `calc(50% + ${Math.sin(angle) * radius}px)`,
-              background: `${colors.secondary}`,
-              boxShadow: `0 0 10px ${colors.glow}`,
-              animationDuration: `${2 + (i % 3)}s`,
-              zIndex: 5,
-              transition: "background 0.5s ease, box-shadow 0.5s ease",
+              background: `radial-gradient(circle, ${colors.secondary}80, ${colors.secondary}20)`,
+              animationDuration: "3s",
+              transition: "background 0.5s ease",
             }}
-          />
-        )
-      })}
+          ></div>
+          <div
+            className="absolute w-52 h-52 rounded-full opacity-15 animate-pulse"
+            style={{
+              animationDelay: "1.5s",
+              animationDuration: "2.5s",
+              background: `radial-gradient(circle, ${colors.secondary}60, ${colors.secondary}10)`,
+              transition: "background 0.5s ease",
+            }}
+          ></div>
 
-      {/* Floating numbers */}
-      {floatingNumbers.map((num) => (
-        <div
-          key={num.id}
-          className="absolute pointer-events-none flex items-center z-20"
-          style={{
-            left: `${num.x}%`,
-            top: `${num.y}%`,
-            opacity: num.opacity,
-            transform: `scale(${num.scale}) rotate(${num.rotation}deg)`,
-            transition: "all 0.8s ease-out",
-            animation: "floatUp 1s forwards ease-out",
-          }}
-          onAnimationEnd={() => {
-            setFloatingNumbers((prev) => prev.map((n) => (n.id === num.id ? { ...n, opacity: 0 } : n)))
-          }}
-        >
-          <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-sm" />
-          <span className="text-yellow-300 font-bold text-lg">+{num.value}</span>
-        </div>
-      ))}
+          {/* Particles around the button */}
+          {[...Array(12)].map((_, i) => {
+            const angle = (i / 12) * Math.PI * 2
+            const radius = 140 + Math.sin(Date.now() / 1000 + i) * 10
+            const size = 2 + Math.random() * 4
+            return (
+              <div
+                key={i}
+                className="absolute rounded-full animate-pulse"
+                style={{
+                  width: `${size}px`,
+                  height: `${size}px`,
+                  left: `calc(50% + ${Math.cos(angle) * radius}px)`,
+                  top: `calc(50% + ${Math.sin(angle) * radius}px)`,
+                  background: `${colors.secondary}`,
+                  boxShadow: `0 0 10px ${colors.glow}`,
+                  animationDuration: `${2 + (i % 3)}s`,
+                  zIndex: 5,
+                  transition: "background 0.5s ease, box-shadow 0.5s ease",
+                }}
+              />
+            )
+          })}
+        </>
+      )}
+
+      {/* Floating numbers - only shown when energy is available */}
+      {!isEnergyDepleted &&
+        floatingNumbers.map((num) => (
+          <div
+            key={num.id}
+            className="absolute pointer-events-none flex items-center z-20"
+            style={{
+              left: `${num.x}%`,
+              top: `${num.y}%`,
+              opacity: num.opacity,
+              transform: `scale(${num.scale}) rotate(${num.rotation}deg)`,
+              transition: "all 0.8s ease-out",
+              animation: "floatUp 1s forwards ease-out",
+            }}
+            onAnimationEnd={() => {
+              setFloatingNumbers((prev) => prev.map((n) => (n.id === num.id ? { ...n, opacity: 0 } : n)))
+            }}
+          >
+            <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1 text-sm" />
+            <span className="text-yellow-300 font-bold text-lg">+{num.value}</span>
+          </div>
+        ))}
 
       <button
         className="relative overflow-hidden z-10 outline-none focus:outline-none"
@@ -175,21 +189,25 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           borderRadius: "50%",
           border: `8px solid ${colors.secondary}`,
           background: `radial-gradient(circle, ${colors.primary}80, ${colors.secondary})`,
-          boxShadow: isPressed
-            ? `0 0 30px ${colors.glow}, inset 0 0 25px rgba(255, 255, 255, 0.6)`
-            : `0 0 20px ${colors.glow}, inset 0 0 15px rgba(255, 255, 255, 0.4)`,
+          boxShadow:
+            isPressed && !isEnergyDepleted
+              ? `0 0 30px ${colors.glow}, inset 0 0 25px rgba(255, 255, 255, 0.6)`
+              : isEnergyDepleted
+                ? `0 0 10px ${colors.glow}40, inset 0 0 10px rgba(255, 255, 255, 0.2)` // Dimmed when energy depleted
+                : `0 0 20px ${colors.glow}, inset 0 0 15px rgba(255, 255, 255, 0.4)`,
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
           transition: "all 0.3s ease, background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease",
-          transform: isPressed ? "scale(0.9)" : "scale(1)",
+          transform: isPressed && !isEnergyDepleted ? "scale(0.9)" : "scale(1)",
           outline: "none",
-          borderColor: colors.secondary,
+          borderColor: isEnergyDepleted ? `${colors.secondary}60` : colors.secondary, // Dimmed border when energy depleted
           WebkitTapHighlightColor: "transparent", // Remove tap highlight on mobile
+          opacity: isEnergyDepleted ? 0.7 : 1, // Dim the button when energy is depleted
         }}
       >
-        {/* Ripple effect */}
-        {showRipple && (
+        {/* Ripple effect - only shown when energy is available */}
+        {showRipple && !isEnergyDepleted && (
           <span
             className="absolute rounded-full opacity-40 animate-ripple"
             style={{
@@ -209,7 +227,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           className="absolute inset-0 rounded-full"
           style={{
             background: `radial-gradient(circle, ${colors.secondary}30, transparent 70%)`,
-            opacity: isPressed ? 0.8 : 0.5,
+            opacity: isPressed && !isEnergyDepleted ? 0.8 : isEnergyDepleted ? 0.3 : 0.5,
             transition: "background 0.5s ease",
           }}
         />
@@ -218,7 +236,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
         <div
           className="relative z-10 transform transition-transform duration-300"
           style={{
-            transform: isPressed ? "scale(0.95)" : "scale(1)",
+            transform: isPressed && !isEnergyDepleted ? "scale(0.95)" : "scale(1)",
           }}
         >
           <Image
@@ -227,14 +245,28 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
             width={180}
             height={180}
             priority
-            className="drop-shadow-lg"
+            className={`drop-shadow-lg ${isEnergyDepleted ? "grayscale" : ""}`}
             style={{
-              filter: `drop-shadow(0 0 10px ${colors.glow})`,
+              filter: isEnergyDepleted
+                ? `drop-shadow(0 0 5px ${colors.glow}50)`
+                : `drop-shadow(0 0 10px ${colors.glow})`,
               transition: "filter 0.5s ease",
             }}
           />
         </div>
       </button>
+
+      {/* Energy depleted overlay */}
+      {isEnergyDepleted && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="bg-black/50 px-4 py-2 rounded-full">
+            <div className="text-white text-sm font-bold flex items-center">
+              <FontAwesomeIcon icon={icons.bolt} className="text-red-400 mr-2" />
+              Energy Depleted
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

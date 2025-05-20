@@ -72,67 +72,64 @@ export async function getOrCreateUser(telegramId: string, username: string) {
   return user
 }
 
+// Add this function to handle rate limiting errors
 export async function updateUserCoins(userId: string, amount: number, transactionType: string, description?: string) {
   const supabase = createServerClient()
-
   try {
-    // Get current coins first
-    const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
+    // First, update the user's coins
+    const { data: userData, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
 
     if (userError) {
-      // Check if it's a rate limit error
-      if (userError.message && userError.message.includes("Too Many Requests")) {
-        console.warn("Rate limit reached when fetching user coins. Returning null.")
-        return null
-      }
       console.error("Error fetching user:", userError)
       return null
     }
 
-    const newCoins = user.coins + amount
+    const newCoins = Math.max(0, userData.coins + amount) // Prevent negative coins
 
-    // Update user coins
     const { error: updateError } = await supabase
       .from("users")
-      .update({ coins: newCoins, updated_at: new Date().toISOString() })
+      .update({
+        coins: newCoins,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", userId)
 
     if (updateError) {
-      // Check if it's a rate limit error
+      // Check if this is a rate limit error
       if (updateError.message && updateError.message.includes("Too Many Requests")) {
-        console.warn("Rate limit reached when updating coins. Returning calculated value.")
-        return newCoins // Return the calculated value without updating the database
+        console.warn("Rate limit hit when updating coins. Using local value.")
+        return null // Return null to indicate rate limiting
       }
+
       console.error("Error updating user coins:", updateError)
       return null
     }
 
-    // Log transaction - but don't fail if this doesn't work
+    // Then, log the transaction (but don't fail if this part fails)
     try {
-      await supabase.from("transactions").insert([
+      await supabase.from("coin_transactions").insert([
         {
           user_id: userId,
           amount,
           transaction_type: transactionType,
-          description,
+          description: description || transactionType,
         },
       ])
     } catch (transactionError) {
-      console.error("Error logging transaction:", transactionError)
-      // Continue anyway - the transaction log is less important than the coin update
+      // Just log the error but don't fail the whole operation
+      console.error("Error logging coin transaction:", transactionError)
     }
 
     return newCoins
   } catch (error) {
-    // Handle JSON parsing errors which might occur with rate limiting
+    // Handle JSON parsing errors that occur with rate limiting
     if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
-      console.warn("Rate limit reached when updating coins. Using calculated value.")
-      // We don't know the current coins, so we can't calculate the new value
-      return null
+      console.warn("Rate limit hit when updating coins (JSON parse error). Using local value.")
+      return null // Return null to indicate rate limiting
     }
 
     console.error("Error in updateUserCoins:", error)
-    return null
+    throw error
   }
 }
 
@@ -529,46 +526,38 @@ export async function claimDailyReward(userId: string, day: number) {
   return { success: true, reward: reward.reward }
 }
 
-// Energy related actions
+// Similarly update the energy function to handle rate limiting
 export async function updateUserEnergy(userId: string, amount: number) {
   const supabase = createServerClient()
-
   try {
-    // Get user details
-    const { data: user, error: userError } = await supabase
+    // First, get current energy
+    const { data: userData, error: userError } = await supabase
       .from("users")
       .select("energy, max_energy")
       .eq("id", userId)
       .single()
 
     if (userError) {
-      // Check if it's a rate limit error
-      if (userError.message && userError.message.includes("Too Many Requests")) {
-        console.warn("Rate limit reached when fetching user energy. Returning null.")
-        return null
-      }
-      console.error("Error fetching user:", userError)
+      console.error("Error fetching user energy:", userError)
       return null
     }
 
-    // Calculate new energy (ensure it doesn't go below 0 or above max)
-    const newEnergy = Math.max(0, Math.min(user.max_energy, user.energy + amount))
+    // Calculate new energy (never below 0 or above max)
+    const newEnergy = Math.max(0, Math.min(userData.max_energy, userData.energy + amount))
 
-    // Update user energy
     const { error: updateError } = await supabase
       .from("users")
       .update({
         energy: newEnergy,
         last_energy_regen: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       })
       .eq("id", userId)
 
     if (updateError) {
-      // Check if it's a rate limit error
+      // Check if this is a rate limit error
       if (updateError.message && updateError.message.includes("Too Many Requests")) {
-        console.warn("Rate limit reached when updating energy. Using local value instead.")
-        return newEnergy // Return the calculated value without updating the database
+        console.warn("Rate limit hit when updating energy. Using local value.")
+        return null // Return null to indicate rate limiting
       }
 
       console.error("Error updating user energy:", updateError)
@@ -577,15 +566,14 @@ export async function updateUserEnergy(userId: string, amount: number) {
 
     return newEnergy
   } catch (error) {
-    // Handle JSON parsing errors which might occur with rate limiting
+    // Handle JSON parsing errors that occur with rate limiting
     if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
-      console.warn("Rate limit reached when updating energy. Using local value instead.")
-      // Return a best-guess value since we couldn't update the database
-      return null
+      console.warn("Rate limit hit when updating energy (JSON parse error). Using local value.")
+      return null // Return null to indicate rate limiting
     }
 
     console.error("Error in updateUserEnergy:", error)
-    return null
+    throw error
   }
 }
 
