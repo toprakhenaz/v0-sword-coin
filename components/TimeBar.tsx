@@ -12,8 +12,8 @@ export default function TimeBar() {
   const [isFlipped, setIsFlipped] = useState<boolean[]>([false, false, false])
   const [cardStatus, setCardStatus] = useState<string[]>(["", "", ""])
   const { getLeagueColors } = useLeagueData()
-  const { dailyCombo, findComboCard } = useUser()
-  const colors = getLeagueColors(6) // Use league 6 colors for the timer bar
+  const { dailyCombo, findComboCard, league } = useUser()
+  const colors = getLeagueColors(league) // Use the user's league colors
 
   useEffect(() => {
     const calculateTimeLeft = () => {
@@ -157,7 +157,7 @@ export default function TimeBar() {
                     }}
                   >
                     <img
-                      src={getCardImage(cardId) || "/placeholder.svg"}
+                      src={getCardImage(cardId) || "/placeholder.svg?height=200&width=200&query=fantasy+weapon"}
                       alt={`Card ${cardId}`}
                       className="w-full h-full object-cover rounded-lg"
                     />

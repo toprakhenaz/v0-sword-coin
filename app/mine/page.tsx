@@ -111,8 +111,62 @@ const SuccessPopup = ({ message, onClose }: { message: string; onClose: () => vo
   )
 }
 
+// Card Found Popup Component
+const CardFoundPopup = ({
+  card,
+  onClose,
+}: { card: { id: number; name: string; image: string }; onClose: () => void }) => {
+  const { getLeagueColors } = useLeagueData()
+  const { league } = useUser()
+  const colors = getLeagueColors(league)
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
+      <div className="bg-gray-800 rounded-lg p-6 max-w-sm w-full border border-gray-700 shadow-xl transform transition-all">
+        <div className="text-center mb-6">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{
+              background: `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})`,
+              boxShadow: `0 0 15px ${colors.glow}`,
+            }}
+          >
+            <FontAwesomeIcon icon={icons.check} className="text-white text-3xl" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2">Daily Combo Card Found!</h3>
+          <div className="mb-4">
+            <img src={card.image || "/placeholder.svg"} alt={card.name} className="w-24 h-24 object-contain mx-auto" />
+            <p className="text-white font-bold mt-2">{card.name}</p>
+          </div>
+          <p className="text-gray-300">You found a card from today's Daily Combo!</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-full py-2 px-4 text-white rounded-lg transition-colors"
+          style={{
+            background: `linear-gradient(to right, ${colors.primary}, ${colors.secondary})`,
+            boxShadow: `0 4px 10px ${colors.glow}40`,
+          }}
+        >
+          Awesome!
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function MinePage() {
-  const { userId, coins, hourlyEarn, league, isLoading: userLoading, updateCoins, refreshUserData } = useUser()
+  const {
+    userId,
+    coins,
+    hourlyEarn,
+    league,
+    isLoading: userLoading,
+    updateCoins,
+    refreshUserData,
+    dailyCombo,
+    findComboCard,
+  } = useUser()
 
   // Use refs to prevent unnecessary re-renders
   const isInitialLoadRef = useRef(true)
@@ -135,10 +189,12 @@ export default function MinePage() {
   const [successMessage, setSuccessMessage] = useState("")
   const { getLeagueColors } = useLeagueData()
   const colors = getLeagueColors(league)
+  const [showCardFoundPopup, setShowCardFoundPopup] = useState(false)
+  const [foundComboCard, setFoundComboCard] = useState<{ id: number; name: string; image: string } | null>(null)
 
   // Daily combo state
   const [timeLeft, setTimeLeft] = useState<string>("00:00:00")
-  const [dailyCombo, setDailyCombo] = useState([1, 2, 3]) // Card IDs for daily combo
+  const [dailyComboCards, setDailyComboCards] = useState([1, 2, 3]) // Card IDs for daily combo
   const [foundCards, setFoundCards] = useState<number[]>([1]) // Found card IDs
 
   // Map Turkish category names to English - memoize to prevent re-creation
@@ -432,6 +488,23 @@ export default function MinePage() {
         return
       }
 
+      // Check if the upgraded card is part of today's daily combo
+      if (dailyCombo.cardIds.includes(selectedCard.id) && !dailyCombo.foundCardIds.includes(selectedCard.id)) {
+        // Mark card as found in daily combo
+        const comboIndex = dailyCombo.cardIds.indexOf(selectedCard.id)
+        const result = await findComboCard(comboIndex)
+
+        if (result.success) {
+          // Show card found popup
+          setFoundComboCard({
+            id: selectedCard.id,
+            name: selectedCard.name,
+            image: selectedCard.image || "/fantasy-weapon.png",
+          })
+          setShowCardFoundPopup(true)
+        }
+      }
+
       // Update all cards state with the updated card
       setAllCards((prevAllCards) => {
         const updatedCards = { ...prevAllCards }
@@ -467,7 +540,17 @@ export default function MinePage() {
     } finally {
       setUpgradeInProgress(false)
     }
-  }, [userId, selectedCard, upgradeInProgress, coins, updateCoins, refreshUserData, hourlyEarn])
+  }, [
+    userId,
+    selectedCard,
+    upgradeInProgress,
+    coins,
+    updateCoins,
+    refreshUserData,
+    hourlyEarn,
+    dailyCombo,
+    findComboCard,
+  ])
 
   const toggleSortOptions = useCallback(() => {
     setShowSortOptions((prev) => !prev)
@@ -515,33 +598,6 @@ export default function MinePage() {
       {/* Daily Combo Section */}
       <div className="px-4 mb-4">
         <TimeBar />
-      </div>
-
-      {/* Daily Cards Grid */}
-      <div className="px-4 mb-4">
-        <div className="grid grid-cols-3 gap-3">
-          {dailyCombo.map((cardId, index) => (
-            <div key={cardId} className="aspect-square">
-              {index < 2 ? (
-                <div className="w-full h-full rounded-lg overflow-hidden">
-                  <img
-                    src={
-                      index === 0
-                        ? "/placeholder.svg?height=200&width=200&query=fantasy+red+hammer+weapon"
-                        : "/placeholder.svg?height=200&width=200&query=fantasy+blue+shield+weapon"
-                    }
-                    alt={`Card ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="w-full h-full bg-[#1f2937] rounded-lg flex items-center justify-center">
-                  <span className="text-yellow-400 text-5xl font-bold">?</span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Category Tabs */}
@@ -632,6 +688,11 @@ export default function MinePage() {
 
       {/* Success Popup */}
       {showSuccessPopup && <SuccessPopup message={successMessage} onClose={closeSuccessPopup} />}
+
+      {/* Card Found Popup */}
+      {showCardFoundPopup && foundComboCard && (
+        <CardFoundPopup card={foundComboCard} onClose={() => setShowCardFoundPopup(false)} />
+      )}
 
       <Navbar />
     </main>
