@@ -178,7 +178,7 @@ export default function EarnPage() {
             isCompleted: false,
             category: "Social",
             platform: "YouTube",
-            platformLogo: "/platform-logos/youtube.png",
+            platformLogo: "youtube",
           },
           {
             id: 3,
@@ -189,7 +189,7 @@ export default function EarnPage() {
             isCompleted: false,
             category: "Social",
             platform: "Twitter",
-            platformLogo: "/platform-logos/twitter.png",
+            platformLogo: "twitter",
           },
           {
             id: 4,
@@ -222,7 +222,7 @@ export default function EarnPage() {
             isCompleted: true,
             category: "Social",
             platform: "Instagram",
-            platformLogo: "/platform-logos/instagram.png",
+            platformLogo: "instagram",
           },
           {
             id: 7,
@@ -233,7 +233,7 @@ export default function EarnPage() {
             isCompleted: false,
             category: "Social",
             platform: "Telegram",
-            platformLogo: "/platform-logos/telegram.png",
+            platformLogo: "telegram",
           },
           {
             id: 8,
@@ -244,7 +244,7 @@ export default function EarnPage() {
             isCompleted: false,
             category: "Crypto",
             platform: "Binance",
-            platformLogo: "/platform-logos/binance.png",
+            platformLogo: "binance",
           },
         ]
 

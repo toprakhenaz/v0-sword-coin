@@ -68,7 +68,15 @@ export default function TaskCard({
           className="w-12 h-12 rounded-full flex-shrink-0 mr-4 flex items-center justify-center"
           style={{ backgroundColor: platformStyle.bgColor }}
         >
-          <FontAwesomeIcon icon={platformStyle.icon} className="text-white text-xl" />
+          {platformLogo ? (
+            <img
+              src={`/platform-logos/${platform.toLowerCase()}.png`}
+              alt={platform}
+              className="w-8 h-8 object-contain"
+            />
+          ) : (
+            <FontAwesomeIcon icon={platformStyle.icon} className="text-white text-xl" />
+          )}
         </div>
 
         {/* Task content */}

@@ -635,9 +635,9 @@ export default function MinePage() {
                   {/* Card Image */}
                   <div className="w-full h-28 overflow-hidden flex-shrink-0">
                     <img
-                      src={card.image || "/placeholder.svg?height=200&width=200&query=fantasy+weapon"}
+                      src={card.image || "/placeholder-j0tzm.png"}
                       alt={card.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-28 object-contain"
                       loading="lazy"
                     />
                   </div>

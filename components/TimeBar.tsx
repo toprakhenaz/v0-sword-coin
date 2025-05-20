@@ -157,9 +157,9 @@ export default function TimeBar() {
                     }}
                   >
                     <img
-                      src={getCardImage(cardId) || "/placeholder.svg"}
+                      src={getCardImage(cardId) || "/placeholder-j0tzm.png"}
                       alt={`Card ${cardId}`}
-                      className="w-full h-full object-cover rounded-lg"
+                      className="w-full h-full object-contain rounded-lg"
                     />
                   </div>
                 )}

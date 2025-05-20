@@ -104,7 +104,7 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
                   }}
                 >
                   <Image
-                    src={getLeagueImage(currentLeague) || "/placeholder.svg"}
+                    src={getLeagueImage(currentLeague) || "/leagues/wooden-sword.png"}
                     alt={`League ${currentLeague}`}
                     width={100}
                     height={100}
