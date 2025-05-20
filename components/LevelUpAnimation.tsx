@@ -22,6 +22,25 @@ export default function LevelUpAnimation({ previousLeague, newLeague, onComplete
   const prevColors = getLeagueColors(previousLeague)
   const newColors = getLeagueColors(newLeague)
 
+  const formatReward = (league: number): string => {
+    switch (league) {
+      case 2:
+        return "50K"
+      case 3:
+        return "500K"
+      case 4:
+        return "5M"
+      case 5:
+        return "50M"
+      case 6:
+        return "500M"
+      case 7:
+        return "5B"
+      default:
+        return "0"
+    }
+  }
+
   useEffect(() => {
     // Animation steps timing
     const timer1 = setTimeout(() => setStep(1), 500)
@@ -178,6 +197,17 @@ export default function LevelUpAnimation({ previousLeague, newLeague, onComplete
                 style={{ color: newColors.text }}
               >
                 Tebrikler! Yeni lige yükseldiniz!
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7 }}
+                className="mt-2 text-xl flex items-center justify-center"
+                style={{ color: newColors.text }}
+              >
+                <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
+                <span className="font-bold">+{formatReward(newLeague)}</span>
               </motion.div>
             </motion.div>
           )}

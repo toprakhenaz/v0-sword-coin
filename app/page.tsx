@@ -497,8 +497,8 @@ export default function Home() {
           <CoinDisplay coins={coins} league={league} onclick={() => setShowLeagueOverlay(true)} />
         </div>
 
-        {/* Combo counter */}
-        {comboCounter > 0 && (
+        {/* Combo counter - only shown when energy is not depleted */}
+        {comboCounter > 0 && energy > 0 && (
           <div className="my-2 text-center">
             <span className="text-sm font-bold text-yellow-400">
               {comboCounter}x Combo

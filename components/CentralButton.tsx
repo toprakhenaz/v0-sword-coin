@@ -72,6 +72,11 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     setShowRipple(true)
     setIsPressed(true)
 
+    // Trigger vibration if available in the browser
+    if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+      window.navigator.vibrate(50) // vibrate for 50ms
+    }
+
     // Call the onClick handler passed from parent
     onClick()
 

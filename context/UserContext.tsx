@@ -146,6 +146,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const lastTapTime = useRef<number>(0)
   const tapCooldown = 300 // ms between taps to prevent too many requests (increased from 200ms)
 
+  // Helper to calculate league rewards
+  const calculateLeagueReward = (league: number): number => {
+    switch (league) {
+      case 2:
+        return 50000
+      case 3:
+        return 500000
+      case 4:
+        return 5000000
+      case 5:
+        return 50000000
+      case 6:
+        return 500000000
+      case 7:
+        return 5000000000
+      default:
+        return 0
+    }
+  }
+
   // Seviyeyi değiştirmek için fonksiyon
   const setLeague = (newLeague: number) => {
     if (newLeague !== league) {
@@ -157,6 +177,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // - Higher league means higher earnings per tap and more max energy
         const newEarnPerTap = Math.max(1, Math.floor(newLeague * 1.5))
         const newMaxEnergy = Math.max(100, 100 + (newLeague - 1) * 50)
+
+        // Calculate league reward based on the new league
+        const leagueReward = calculateLeagueReward(newLeague)
 
         // Update database if userId exists
         if (userId) {
@@ -179,6 +202,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setLeagueState(newLeague)
           setEarnPerTap(newEarnPerTap)
           setMaxEnergy(newMaxEnergy)
+
+          // Award the coins for leveling up only after animation has started
+          if (leagueReward > 0) {
+            updateCoinsHandler(leagueReward, "league_reward", `Reached ${newLeague} League`)
+          }
 
           // End animation after transition
           setTimeout(() => {
@@ -768,29 +796,30 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   // Use rocket boost
-  useEffect(() => {
-    const memoizedHandleRocketBoost = async () => {
-      if (!userId || isLoadingRocket) return
+  const memoizedHandleRocketBoost = useCallback(async () => {
+    if (!userId || isLoadingRocket) return
 
-      setIsLoadingRocket(true)
-      try {
-        const boostResult = await useRocketBoost(userId)
-        setResultRocket(boostResult)
+    setIsLoadingRocket(true)
+    try {
+      const boostResult = await useRocketBoost(userId)
+      setResultRocket(boostResult)
 
-        if (boostResult.success) {
-          // Update local state
-          setBoosts({
-            ...boosts,
-            dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
-          })
-          setEnergy(Math.min(maxEnergy, energy + 500))
-        }
-      } finally {
-        setIsLoadingRocket(false)
+      if (boostResult.success) {
+        // Update local state
+        setBoosts({
+          ...boosts,
+          dailyRockets: boostResult.rocketsLeft || boosts.dailyRockets - 1,
+        })
+        setEnergy(Math.min(maxEnergy, energy + 500))
       }
+    } finally {
+      setIsLoadingRocket(false)
     }
-    setHandleRocketBoost(() => memoizedHandleRocketBoost)
   }, [boosts, energy, maxEnergy, userId, isLoadingRocket])
+
+  useEffect(() => {
+    setHandleRocketBoost(() => memoizedHandleRocketBoost)
+  }, [memoizedHandleRocketBoost])
 
   const rocketBoost = useCallback(() => {
     return {
@@ -801,33 +830,90 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [resultRocket, isLoadingRocket, handleRocketBoost])
 
   // Use full energy boost
-  useEffect(() => {
-    const memoizedUseFullEnergyBoostHandler = async () => {
-      if (!userId) return { success: false, message: "User not found" }
+  const memoizedUseFullEnergyBoostHandler = useCallback(async () => {
+    if (!userId) return { success: false, message: "User not found" }
 
-      const result = await useFullEnergyBoost(userId)
-      setFullEnergyBoostResult(result)
+    const result = await useFullEnergyBoost(userId)
+    setFullEnergyBoostResult(result)
 
-      if (result.success) {
-        // Update local state
-        setBoosts({
-          ...boosts,
-          energyFullUsed: true,
-        })
-        setEnergy(maxEnergy)
+    if (result.success) {
+      // Update local state
+      setBoosts({
+        ...boosts,
+        energyFullUsed: true,
+      })
+      setEnergy(maxEnergy)
 
-        return { success: true }
-      }
-
-      return { success: false, message: result.message || "Failed to use full energy boost" }
+      return { success: true }
     }
-    setUseFullEnergyBoostHandler(() => memoizedUseFullEnergyBoostHandler)
+
+    return { success: false, message: result.message || "Failed to use full energy boost" }
   }, [boosts, energy, maxEnergy, userId])
 
+  useEffect(() => {
+    setUseFullEnergyBoostHandler(() => memoizedUseFullEnergyBoostHandler)
+  }, [memoizedUseFullEnergyBoostHandler])
+
   // Enhanced refreshUserData function to ensure hourly earnings are updated
+  const [showHourlyPopup, setShowHourlyPopup] = useState(false)
+  const [hourlyCoinsToCollect, setHourlyCoinsToCollect] = useState(0)
+
   const refreshUserData = async () => {
     try {
       if (!userId) return
+
+      // First check offline time calculations
+      const now = new Date()
+
+      // Get user data from database
+      const { data: userDataInitial } = await supabase.from("users").select("*").eq("id", userId).single()
+
+      if (userDataInitial) {
+        // Calculate energy regeneration based on time passed
+        const lastEnergyRegenTime = new Date(userDataInitial.last_energy_regen)
+        const timeDiffMs = now.getTime() - lastEnergyRegenTime.getTime()
+        const minutesPassed = timeDiffMs / (1000 * 60)
+
+        // Apply charge speed boost
+        const { data: userBoosts } = await supabase.from("user_boosts").select("*").eq("user_id", userId).single()
+        const chargeMultiplier = userBoosts ? 1 + (userBoosts.charge_speed_level - 1) * 0.2 : 1
+
+        // Calculate energy to add
+        const energyToAdd = Math.floor(minutesPassed * chargeMultiplier)
+        const newEnergy = Math.min(userDataInitial.max_energy, userDataInitial.energy + energyToAdd)
+
+        // Calculate hourly earnings
+        const lastHourlyCollectTime = new Date(userDataInitial.last_hourly_collect)
+        const hoursPassed = (now.getTime() - lastHourlyCollectTime.getTime()) / (1000 * 60 * 60)
+        const hoursToCount = Math.min(hoursPassed, 24) // Cap at 24 hours
+        const hourlyEarningsToAdd = Math.floor(userDataInitial.hourly_earn * hoursToCount)
+
+        // Update user data locally
+        setCoins(userDataInitial.coins)
+        setEnergy(newEnergy) // Use calculated energy
+        setMaxEnergy(userDataInitial.max_energy)
+        setEarnPerTap(userDataInitial.earn_per_tap)
+        setHourlyEarn(userDataInitial.hourly_earn)
+        setLeagueState(userDataInitial.league)
+        setLastEnergyUpdate(now) // Use current time
+
+        // If significant time has passed, update energy in database
+        if (energyToAdd > 0) {
+          await supabase
+            .from("users")
+            .update({
+              energy: newEnergy,
+              last_energy_regen: now.toISOString(),
+            })
+            .eq("id", userId)
+        }
+
+        // If hourly earnings are available, show popup
+        if (hourlyEarningsToAdd > 0) {
+          setHourlyCoinsToCollect(hourlyEarningsToAdd)
+          setShowHourlyPopup(true)
+        }
+      }
 
       // Fetch user data
       const { data: userData } = await supabase.from("users").select("*").eq("id", userId).single()
