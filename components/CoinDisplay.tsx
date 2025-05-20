@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import type { CoinDisplayProps } from "@/types"
 import { useLeagueData } from "@/data/GeneralData"
+import { formatNumber } from "@/lib/utils"
 
 export default function CoinDisplay({ coins, league, onclick }: CoinDisplayProps) {
   const { getLeagueImage, getLeagueColors, getLeagueName } = useLeagueData()
@@ -16,7 +17,7 @@ export default function CoinDisplay({ coins, league, onclick }: CoinDisplayProps
         onClick={() => {}}
       >
         <FontAwesomeIcon icon={icons.coins} className="text-yellow-300 mr-2 text-lg" />
-        <span className="text-white font-extrabold text-lg">{coins.toLocaleString()}</span>
+        <span className="text-white font-extrabold text-lg">{formatNumber(coins)}</span>
       </button>
 
       <button

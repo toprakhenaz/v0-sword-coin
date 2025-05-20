@@ -5,6 +5,7 @@ import { icons } from "@/icons"
 import type { CardProps } from "@/types"
 import { useState } from "react"
 import { useLeagueData } from "@/data/GeneralData"
+import { formatNumber } from "@/lib/utils"
 
 export default function Card({ card, onUpgrade, coins }: CardProps) {
   const isDisabled = coins < card.upgradeCost
@@ -42,7 +43,7 @@ export default function Card({ card, onUpgrade, coins }: CardProps) {
         </div>
 
         <div className="text-center text-sm sm:text-base text-yellow-300 font-semibold">
-          <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1" />+{card.hourlyIncome.toLocaleString()}
+          <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-1" />+{formatNumber(card.hourlyIncome)}
           /Saat
         </div>
 
@@ -73,7 +74,7 @@ export default function Card({ card, onUpgrade, coins }: CardProps) {
         aria-disabled={isDisabled}
       >
         <FontAwesomeIcon icon={icons.coins} className="mr-2" />
-        <span className="text-lg">{card.upgradeCost.toLocaleString()}</span>
+        <span className="text-lg">{formatNumber(card.upgradeCost)}</span>
       </button>
 
       {/* Add sparkle effect on higher level cards */}

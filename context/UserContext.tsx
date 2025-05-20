@@ -123,11 +123,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Rocket boost states
   const [resultRocket, setResultRocket] = useState<{ success: boolean; message?: string } | null>(null)
   const [isLoadingRocket, setIsLoadingRocket] = useState(false)
+  const [handleRocketBoost, setHandleRocketBoost] = useState<() => Promise<void>>(() => async () => {})
 
   // Full energy boost state
   const [fullEnergyBoostResult, setFullEnergyBoostResult] = useState<{ success: boolean; message?: string } | null>(
     null,
   )
+  const [useFullEnergyBoostHandler, setUseFullEnergyBoostHandler] = useState<
+    () => Promise<{ success: boolean; message?: string }>
+  >(() => async () => ({ success: false }))
 
   // Debounce and rate limiting
   const energyUpdateQueue = useRef<number>(0)
@@ -560,8 +564,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     let energyInterval: NodeJS.Timeout | null = null
 
     if (userId && energy < maxEnergy) {
+      // Base regeneration time in seconds (15s for league 1, decreasing by 2s per league)
+      const baseRegenTime = Math.max(3, 15 - (league - 1) * 2) * 1000
+
+      // Apply charge speed boost (from user's boosts)
       const chargeMultiplier = 1 + (boosts.chargeSpeed.level - 1) * 0.2 // 20% increase per level
-      const regenTime = 60000 / chargeMultiplier // Adjust regen time based on charge speed
+      const regenTime = baseRegenTime / chargeMultiplier
+
+      console.log(`Energy regen time: ${regenTime}ms (base: ${baseRegenTime}ms, multiplier: ${chargeMultiplier})`)
 
       energyInterval = setInterval(() => {
         // Add to queue instead of updating immediately
@@ -576,13 +586,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
           // Only process about 20% of the time
           processEnergyUpdateQueue()
         }
-      }, regenTime) // Adjusted time
+      }, regenTime)
     }
 
     return () => {
       if (energyInterval) clearInterval(energyInterval)
     }
-  }, [userId, energy, maxEnergy, boosts.chargeSpeed.level, processEnergyUpdateQueue])
+  }, [userId, energy, maxEnergy, league, boosts.chargeSpeed.level, processEnergyUpdateQueue])
 
   // Combo system
   useEffect(() => {
@@ -758,7 +768,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   // Use rocket boost
-  const [handleRocketBoost, setHandleRocketBoost] = useState<() => Promise<void>>(() => async () => {})
   useEffect(() => {
     const memoizedHandleRocketBoost = async () => {
       if (!userId || isLoadingRocket) return
@@ -792,9 +801,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [resultRocket, isLoadingRocket, handleRocketBoost])
 
   // Use full energy boost
-  const [useFullEnergyBoostHandler, setUseFullEnergyBoostHandler] = useState<
-    () => Promise<{ success: boolean; message?: string }>
-  >(() => async () => ({ success: false }))
   useEffect(() => {
     const memoizedUseFullEnergyBoostHandler = async () => {
       if (!userId) return { success: false, message: "User not found" }

@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import { useLeagueData } from "@/data/GeneralData"
 import { useUser } from "@/context/UserContext"
+import { formatNumber } from "@/lib/utils"
 
 export default function HeaderCard({
   coins,
@@ -37,7 +38,7 @@ export default function HeaderCard({
           className="text-yellow-300 mr-2 animate-pulse"
           style={{ animationDuration: "3s" }}
         />
-        <span className="text-white font-bold text-lg">{coins?.toLocaleString()}</span>
+        <span className="text-white font-bold text-lg">{coins ? formatNumber(coins) : "0"}</span>
       </div>
 
       <div
@@ -50,7 +51,7 @@ export default function HeaderCard({
       >
         <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2" />
         <div>
-          <span className="font-medium text-white text-lg">{displayHourlyEarn.toLocaleString()}</span>
+          <span className="font-medium text-white text-lg">{formatNumber(displayHourlyEarn)}</span>
           <span className="text-gray-400 text-xs ml-1">/hour</span>
         </div>
       </div>

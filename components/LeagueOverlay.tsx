@@ -7,6 +7,7 @@ import type { LeagueOverlayProps } from "@/types"
 import { useLeagueData } from "@/data/GeneralData"
 import { leaderboardData } from "@/data/leaderboardData"
 import Image from "next/image"
+import { formatNumber } from "@/lib/utils"
 
 export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
   const [currentLeague, setCurrentLeague] = useState<number>(4)
@@ -287,15 +288,4 @@ export default function LeagueOverlay({ onClose, coins }: LeagueOverlayProps) {
       </div>
     </div>
   )
-}
-
-// Helper function to format numbers in a more readable way
-function formatNumber(num: number): string {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + "M"
-  }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + "K"
-  }
-  return num.toString()
 }

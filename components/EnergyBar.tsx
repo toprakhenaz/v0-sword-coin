@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { icons } from "@/icons"
 import type { EnergyBarProps } from "@/types"
 import { useLeagueData } from "@/data/GeneralData"
+import { formatNumber } from "@/lib/utils"
 
 export default function EnergyBar({ energy, maxEnergy, boost, onOpenBoostOverlay, league }: EnergyBarProps) {
   const [isAnimating, setIsAnimating] = useState(false)
@@ -30,15 +31,21 @@ export default function EnergyBar({ energy, maxEnergy, boost, onOpenBoostOverlay
     }
   }, [energy, prevEnergy])
 
-  // Format energy with colored value
+  // Calculate and display the energy regen speed based on league
+  const getRegenSpeed = () => {
+    // Base regeneration time in seconds (15s for league 1, decreasing by 2s per league)
+    const baseRegenTime = Math.max(3, 15 - (league - 1) * 2)
+    return `${baseRegenTime}s/energy`
+  }
+
   const formattedEnergy = (
     <span>
       <span
         className={energy < maxEnergy * 0.2 ? "text-red-400" : energy === maxEnergy ? "text-green-400" : "text-white"}
       >
-        {energy}
+        {formatNumber(energy, 0)}
       </span>
-      <span className="text-gray-300"> / {maxEnergy}</span>
+      <span className="text-gray-300"> / {formatNumber(maxEnergy, 0)}</span>
     </span>
   )
 
