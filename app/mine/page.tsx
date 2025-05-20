@@ -9,6 +9,8 @@ import { icons } from "@/icons"
 import { useLeagueData } from "@/data/GeneralData"
 import { supabase } from "@/lib/supabase"
 import { useUser } from "@/context/UserContext"
+// Import the TimeBar component at the top of the file
+import TimeBar from "@/components/TimeBar"
 
 interface CardItem {
   id: number
@@ -512,25 +514,7 @@ export default function MinePage() {
 
       {/* Daily Combo Section */}
       <div className="px-4 mb-4">
-        <div className="bg-[#1f2937] rounded-xl p-4 flex justify-between items-center">
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-[#1f2937] rounded-full flex items-center justify-center mr-3">
-              <FontAwesomeIcon icon={icons.clock} className="text-yellow-400 text-xl" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-white">Daily Combo</div>
-              <div className="text-xs font-mono text-gray-300">{timeLeft}</div>
-            </div>
-          </div>
-          <div className="flex items-center">
-            <FontAwesomeIcon icon={icons.coins} className="text-yellow-400 mr-2 text-lg" />
-            <span className="text-lg font-bold text-white">100,000</span>
-            <FontAwesomeIcon
-              icon={icons.infoCircle}
-              className="ml-3 text-blue-300 hover:text-blue-200 cursor-pointer transition-colors"
-            />
-          </div>
-        </div>
+        <TimeBar />
       </div>
 
       {/* Daily Cards Grid */}

@@ -57,7 +57,7 @@ export async function createUser(telegramId: string, username: string) {
   ])
 
   // Create initial daily combo
-  await createDailyCombo(data.id)
+  await getOrCreateDailyCombo(data.id)
 
   return data
 }
@@ -140,9 +140,9 @@ export async function getUserItems(userId: string) {
     const { data, error } = await supabase
       .from("user_items")
       .select(`
-        *,
-        items (*)
-      `)
+      *,
+      items (*)
+    `)
       .eq("user_id", userId)
 
     if (error) {
@@ -331,9 +331,9 @@ export async function getUserTasks(userId: string) {
   const { data, error } = await supabase
     .from("user_tasks")
     .select(`
-      *,
-      tasks (*)
-    `)
+    *,
+    tasks (*)
+  `)
     .eq("user_id", userId)
 
   if (error) {
@@ -454,9 +454,9 @@ export async function getUserDailyRewards(userId: string) {
   const { data, error } = await supabase
     .from("user_daily_rewards")
     .select(`
-      *,
-      daily_rewards (*)
-    `)
+    *,
+    daily_rewards (*)
+  `)
     .eq("user_id", userId)
 
   if (error) {
@@ -812,9 +812,9 @@ export async function getUserReferrals(userId: string) {
   const { data, error } = await supabase
     .from("referrals")
     .select(`
-      *,
-      referred:referred_id(id, username)
-    `)
+    *,
+    referred:referred_id(id, username)
+  `)
     .eq("referrer_id", userId)
 
   if (error) {
@@ -864,139 +864,6 @@ export async function claimReferralReward(userId: string, referralId: string) {
   await updateUserCoins(userId, referral.reward_amount, "referral_reward", `Claimed referral reward`)
 
   return { success: true, reward: referral.reward_amount }
-}
-
-// Daily combo system
-export async function createDailyCombo(userId: string) {
-  const supabase = createServerClient()
-  const today = new Date().toISOString().split("T")[0]
-
-  // Check if combo already exists for today
-  const { data: existingCombo, error: checkError } = await supabase
-    .from("daily_combo")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("day_date", today)
-    .single()
-
-  if (!checkError && existingCombo) {
-    return existingCombo
-  }
-
-  // Generate 3 random card IDs (using item IDs from 1-10)
-  const cardIds = Array.from({ length: 3 }, () => Math.floor(Math.random() * 10) + 1)
-
-  // Create daily combo
-  const { data, error } = await supabase
-    .from("daily_combo")
-    .insert([
-      {
-        user_id: userId,
-        day_date: today,
-        card_ids: cardIds,
-        found_card_ids: [],
-        reward: 100000,
-        is_completed: false,
-      },
-    ])
-    .select()
-    .single()
-
-  if (error) {
-    console.error("Error creating daily combo:", error)
-    return null
-  }
-
-  return data
-}
-
-export async function getUserDailyCombo(userId: string) {
-  const supabase = createServerClient()
-  const today = new Date().toISOString().split("T")[0]
-
-  // Get today's combo
-  const { data, error } = await supabase
-    .from("daily_combo")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("day_date", today)
-    .single()
-
-  if (error) {
-    // If no combo exists for today, create one
-    if (error.code === "PGRST116") {
-      return await createDailyCombo(userId)
-    }
-
-    console.error("Error fetching daily combo:", error)
-    return null
-  }
-
-  return data
-}
-
-export async function findDailyComboCard(userId: string, cardIndex: number) {
-  const supabase = createServerClient()
-  const today = new Date().toISOString().split("T")[0]
-
-  // Get today's combo
-  const { data: combo, error: comboError } = await supabase
-    .from("daily_combo")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("day_date", today)
-    .single()
-
-  if (comboError) {
-    console.error("Error fetching daily combo:", comboError)
-    return { success: false, message: "Daily combo not found" }
-  }
-
-  // Check if card index is valid
-  if (cardIndex < 0 || cardIndex >= combo.card_ids.length) {
-    return { success: false, message: "Invalid card index" }
-  }
-
-  // Check if card is already found
-  const cardId = combo.card_ids[cardIndex]
-  if (combo.found_card_ids.includes(cardId)) {
-    return { success: false, message: "Card already found" }
-  }
-
-  // Add card to found cards
-  const newFoundCards = [...combo.found_card_ids, cardId]
-  const isCompleted = newFoundCards.length === combo.card_ids.length
-
-  // Update combo
-  const updateData: any = {
-    found_card_ids: newFoundCards,
-    updated_at: new Date().toISOString(),
-  }
-
-  if (isCompleted) {
-    updateData.is_completed = true
-    updateData.completed_at = new Date().toISOString()
-  }
-
-  const { error: updateError } = await supabase.from("daily_combo").update(updateData).eq("id", combo.id)
-
-  if (updateError) {
-    console.error("Error updating daily combo:", updateError)
-    return { success: false, message: "Error updating daily combo" }
-  }
-
-  // If combo is completed, give reward
-  if (isCompleted) {
-    await updateUserCoins(userId, combo.reward, "daily_combo", "Completed daily combo")
-  }
-
-  return {
-    success: true,
-    cardId,
-    foundCardIds: newFoundCards,
-    isCompleted,
-    reward: isCompleted ? combo.reward : 0,
-  }
 }
 
 // Hourly earnings
@@ -1073,5 +940,186 @@ export async function resetDailyBoosts() {
     return { success: false }
   }
 
+  return { success: true }
+}
+
+// Add these new functions for the daily combo system
+
+// Get or create daily combo for a user
+export async function getOrCreateDailyCombo(userId: string) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  // Check if combo exists for today
+  const { data: existingCombo, error: checkError } = await supabase
+    .from("daily_combo")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("day_date", today)
+    .single()
+
+  if (!checkError && existingCombo) {
+    return existingCombo
+  }
+
+  // Get all available items
+  const { data: validCards } = await supabase.from("items").select("id")
+
+  let validCardIds = validCards ? validCards.map((card) => card.id) : []
+
+  // If no valid cards, use default IDs
+  if (validCardIds.length === 0) {
+    validCardIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  }
+
+  // Get recent combos for this user
+  const { data: recentCombos } = await supabase
+    .from("daily_combo")
+    .select("card_ids")
+    .eq("user_id", userId)
+    .gt("day_date", new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
+    .order("day_date", { ascending: false })
+
+  // Identify cards used in recent days
+  const recentCardIds = recentCombos ? recentCombos.flatMap((combo) => combo.card_ids) : []
+
+  // Select cards (filtering out recently used ones)
+  const selectedCardIds: number[] = []
+  let attempts = 0
+
+  // Select 3 cards, preferably ones not used in recent days
+  while (selectedCardIds.length < 3 && attempts < 20) {
+    const randomIndex = Math.floor(Math.random() * validCardIds.length)
+    const cardId = validCardIds[randomIndex]
+
+    // Add if not already selected and not used in last 3 days or if too many attempts
+    if (!selectedCardIds.includes(cardId) && (!recentCardIds.includes(cardId) || attempts > 10)) {
+      selectedCardIds.push(cardId)
+    }
+
+    attempts++
+  }
+
+  // Fill in any missing cards
+  while (selectedCardIds.length < 3) {
+    const randomIndex = Math.floor(Math.random() * validCardIds.length)
+    const cardId = validCardIds[randomIndex]
+
+    if (!selectedCardIds.includes(cardId)) {
+      selectedCardIds.push(cardId)
+    }
+  }
+
+  // Create new daily combo
+  const { data, error } = await supabase
+    .from("daily_combo")
+    .insert([
+      {
+        user_id: userId,
+        day_date: today,
+        card_ids: selectedCardIds,
+        found_card_ids: [],
+        reward: 100000,
+        is_completed: false,
+      },
+    ])
+    .select()
+    .single()
+
+  if (error) {
+    console.error("Error creating daily combo:", error)
+    return null
+  }
+
+  return data
+}
+
+// Get user's daily combo
+export async function getUserDailyCombo(userId: string) {
+  return getOrCreateDailyCombo(userId)
+}
+
+// Find a card in the daily combo
+export async function findDailyComboCard(userId: string, cardIndex: number) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  // Get today's combo
+  const { data: combo, error: comboError } = await supabase
+    .from("daily_combo")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("day_date", today)
+    .single()
+
+  if (comboError) {
+    // If no combo exists for today, create one and try again
+    if (comboError.code === "PGRST116") {
+      await getOrCreateDailyCombo(userId)
+      // Call this function recursively now that the combo exists
+      return findDailyComboCard(userId, cardIndex)
+    }
+
+    console.error("Error fetching daily combo:", comboError)
+    return { success: false, message: "Daily combo not found" }
+  }
+
+  // Check if card index is valid
+  if (cardIndex < 0 || cardIndex >= combo.card_ids.length) {
+    return { success: false, message: "Invalid card index" }
+  }
+
+  // Check if card is already found
+  const cardId = combo.card_ids[cardIndex]
+  if (combo.found_card_ids.includes(cardId)) {
+    return {
+      success: false,
+      message: "Card already found",
+      cardId,
+      foundCardIds: combo.found_card_ids,
+      isCompleted: combo.is_completed,
+    }
+  }
+
+  // Add card to found cards
+  const newFoundCards = [...combo.found_card_ids, cardId]
+  const isCompleted = newFoundCards.length === combo.card_ids.length
+
+  // Update combo
+  const updateData: any = {
+    found_card_ids: newFoundCards,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (isCompleted) {
+    updateData.is_completed = true
+    updateData.completed_at = new Date().toISOString()
+  }
+
+  const { error: updateError } = await supabase.from("daily_combo").update(updateData).eq("id", combo.id)
+
+  if (updateError) {
+    console.error("Error updating daily combo:", updateError)
+    return { success: false, message: "Error updating daily combo" }
+  }
+
+  // If combo is completed, give reward
+  if (isCompleted) {
+    await updateUserCoins(userId, combo.reward, "daily_combo", "Completed daily combo")
+  }
+
+  return {
+    success: true,
+    cardId,
+    foundCardIds: newFoundCards,
+    isCompleted,
+    reward: isCompleted ? combo.reward : 0,
+  }
+}
+
+// Reset daily combo (for cron job)
+export async function resetDailyCombo() {
+  // This would be implemented in a separate cron job
+  // For now, we'll just return success
   return { success: true }
 }
