@@ -157,7 +157,91 @@ export async function getUserItems(userId: string) {
   }
 }
 
-// Calculate and update user's total hourly earn
+
+
+// Improved collectHourlyEarnings function
+export async function collectHourlyEarnings(userId: string) {
+  const supabase = createServerClient()
+
+  try {
+    // Get user details
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("hourly_earn, last_hourly_collect")
+      .eq("id", userId)
+      .single()
+
+    if (userError) {
+      console.error("Error fetching user:", userError)
+      return { success: false, message: "User not found" }
+    }
+
+    const now = new Date()
+    const lastCollect = new Date(user.last_hourly_collect)
+    const hoursPassed = (now.getTime() - lastCollect.getTime()) / (1000 * 60 * 60)
+
+    // Check if at least 1 hour has passed
+    if (hoursPassed < 1) {
+      const minutesLeft = Math.ceil((1 - hoursPassed) * 60)
+      return {
+        success: false,
+        message: "Not enough time has passed",
+        timeLeft: minutesLeft,
+      }
+    }
+
+    // Calculate coins to collect (max 24 hours)
+    const hoursToCount = Math.min(hoursPassed, 24)
+    const coinsToCollect = Math.floor(user.hourly_earn * hoursToCount)
+
+    // If no hourly income, return early
+    if (coinsToCollect === 0) {
+      return {
+        success: false,
+        message: "No hourly income to collect. Buy cards to earn!",
+      }
+    }
+
+    // Update last collect time and add coins
+    const { data: updatedUser, error: updateError } = await supabase
+      .from("users")
+      .update({
+        last_hourly_collect: now.toISOString(),
+        coins: supabase.raw('coins + ?', [coinsToCollect]),
+        updated_at: now.toISOString(),
+      })
+      .eq("id", userId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error("Error updating user:", updateError)
+      return { success: false, message: "Error collecting earnings" }
+    }
+
+    // Log transaction
+    await supabase.from("coin_transactions").insert([
+      {
+        user_id: userId,
+        amount: coinsToCollect,
+        transaction_type: "hourly_earnings",
+        description: `Collected ${hoursToCount.toFixed(1)} hours of earnings`,
+      },
+    ])
+
+    return { 
+      success: true, 
+      coins: coinsToCollect, 
+      hours: hoursToCount,
+      newTotal: updatedUser.coins
+    }
+  } catch (error) {
+    console.error("Error in collectHourlyEarnings:", error)
+    return { success: false, message: "An unexpected error occurred" }
+  }
+}
+
+// Update user's total hourly earn based on their items
 export async function updateUserHourlyEarn(userId: string) {
   const supabase = createServerClient()
 
@@ -176,10 +260,13 @@ export async function updateUserHourlyEarn(userId: string) {
     // Calculate total hourly earn
     const totalHourlyEarn = userItems.reduce((total, item) => total + item.hourly_income, 0)
 
-    // Update user
+    // Update user's hourly_earn
     const { error: updateError } = await supabase
       .from("users")
-      .update({ hourly_earn: totalHourlyEarn, updated_at: new Date().toISOString() })
+      .update({ 
+        hourly_earn: totalHourlyEarn, 
+        updated_at: new Date().toISOString() 
+      })
       .eq("id", userId)
 
     if (updateError) {
@@ -192,6 +279,7 @@ export async function updateUserHourlyEarn(userId: string) {
     return 0
   }
 }
+
 
 export async function upgradeItem(userId: string, itemId: number) {
   const supabase = createServerClient()
@@ -807,63 +895,6 @@ export async function claimReferralReward(userId: string, referralId: string) {
   return { success: true, reward: referral.reward_amount }
 }
 
-// Hourly earnings
-export async function collectHourlyEarnings(userId: string) {
-  const supabase = createServerClient()
-
-  // Get user details
-  const { data: user, error: userError } = await supabase
-    .from("users")
-    .select("hourly_earn, last_hourly_collect")
-    .eq("id", userId)
-    .single()
-
-  if (userError) {
-    console.error("Error fetching user:", userError)
-    return { success: false, message: "User not found" }
-  }
-
-  const now = new Date()
-  const lastCollect = new Date(user.last_hourly_collect)
-  const hoursPassed = (now.getTime() - lastCollect.getTime()) / (1000 * 60 * 60)
-
-  // Check if at least 1 hour has passed
-  if (hoursPassed < 1) {
-    return {
-      success: false,
-      message: "Not enough time has passed",
-      timeLeft: 60 - Math.floor(hoursPassed * 60),
-    }
-  }
-
-  // Calculate coins to collect (max 24 hours)
-  const hoursToCount = Math.min(hoursPassed, 24)
-  const coinsToCollect = Math.floor(user.hourly_earn * hoursToCount)
-
-  // Update last collect time
-  const { error: updateError } = await supabase
-    .from("users")
-    .update({
-      last_hourly_collect: now.toISOString(),
-      updated_at: now.toISOString(),
-    })
-    .eq("id", userId)
-
-  if (updateError) {
-    console.error("Error updating last collect time:", updateError)
-    return { success: false, message: "Error updating last collect time" }
-  }
-
-  // Add coins to user
-  await updateUserCoins(
-    userId,
-    coinsToCollect,
-    "hourly_earnings",
-    `Collected ${hoursToCount.toFixed(1)} hours of earnings`,
-  )
-
-  return { success: true, coins: coinsToCollect, hours: hoursToCount }
-}
 
 // Reset daily boosts
 export async function resetDailyBoosts() {

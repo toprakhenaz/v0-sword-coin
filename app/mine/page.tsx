@@ -176,6 +176,7 @@ export default function MinePage() {
     findComboCard,
   } = useUser()
 
+
   // Use refs to prevent unnecessary re-renders
   const isInitialLoadRef = useRef(true)
   const [isLoading, setIsLoading] = useState(true)
@@ -416,12 +417,11 @@ export default function MinePage() {
     [coins],
   )
 
+
   const handleUpgradeConfirm = useCallback(async () => {
     if (!userId || !selectedCard || upgradeInProgress) return
 
-    // Check if user has enough coins
     if (coins < selectedCard.upgradeCost) {
-      // Show a message or alert that user doesn't have enough coins
       setSuccessMessage("Not enough coins to upgrade this item!")
       setShowSuccessPopup(true)
       setSelectedCard(null)
@@ -480,15 +480,14 @@ export default function MinePage() {
         return
       }
 
-      // Deduct coins from user - check for success
+      // Deduct coins
       const success = await updateCoins(
         -selectedCard.upgradeCost,
         "item_upgrade",
-        `Upgraded item ${selectedCard.id} to level ${newLevel}`,
+        `Upgraded ${selectedCard.name} to level ${newLevel}`
       )
 
       if (!success) {
-        // If update fails (not enough coins), show error message
         setSuccessMessage("Transaction failed. Not enough coins!")
         setShowSuccessPopup(true)
         setSelectedCard(null)
@@ -498,12 +497,10 @@ export default function MinePage() {
 
       // Check if the upgraded card is part of today's daily combo
       if (dailyCombo.cardIds.includes(selectedCard.id) && !dailyCombo.foundCardIds.includes(selectedCard.id)) {
-        // Mark card as found in daily combo
         const comboIndex = dailyCombo.cardIds.indexOf(selectedCard.id)
         const result = await findComboCard(comboIndex)
 
         if (result.success) {
-          // Show card found popup
           setFoundComboCard({
             id: selectedCard.id,
             name: selectedCard.name,
@@ -513,11 +510,9 @@ export default function MinePage() {
         }
       }
 
-      // Update all cards state with the updated card
+      // Update cards in state
       setAllCards((prevAllCards) => {
         const updatedCards = { ...prevAllCards }
-
-        // Find and update the card in its category
         if (updatedCards[selectedCard.category]) {
           updatedCards[selectedCard.category] = updatedCards[selectedCard.category].map((c) =>
             c.id === selectedCard.id
@@ -527,19 +522,20 @@ export default function MinePage() {
                   hourlyIncome: newHourlyIncome,
                   upgradeCost: newUpgradeCost,
                 }
-              : c,
+              : c
           )
         }
-
         return updatedCards
       })
 
-      // Refresh user data in context to update hourly earnings
+      // Refresh user data to update hourly earnings
       await refreshUserData()
 
-      // Show success popup
+      // Calculate income increase
+      const incomeIncrease = newHourlyIncome - selectedCard.hourlyIncome
+
       setSuccessMessage(
-        `${selectedCard.name} is now level ${newLevel}! Hourly income increased to ${hourlyEarn + newHourlyIncome - selectedCard.hourlyIncome}/hour.`,
+        `${selectedCard.name} upgraded to level ${newLevel}! Hourly income increased by +${incomeIncrease}/hour.`
       )
       setSelectedCard(null)
       setShowSuccessPopup(true)
@@ -548,55 +544,16 @@ export default function MinePage() {
     } finally {
       setUpgradeInProgress(false)
     }
-  }, [
-    userId,
-    selectedCard,
-    upgradeInProgress,
-    coins,
-    updateCoins,
-    refreshUserData,
-    hourlyEarn,
-    dailyCombo,
-    findComboCard,
-  ])
+  }, [userId, selectedCard, upgradeInProgress, coins, updateCoins, refreshUserData, dailyCombo, findComboCard])
 
-  const toggleSortOptions = useCallback(() => {
-    setShowSortOptions((prev) => !prev)
-  }, [])
 
-  const handleSort = useCallback((option: "level" | "income" | "cost") => {
-    setSortOption((prevOption) => {
-      if (prevOption === option) {
-        // Toggle direction if same option
-        setSortDirection((prevDir) => (prevDir === "asc" ? "desc" : "asc"))
-        return prevOption
-      } else {
-        // Set new option with default desc direction
-        setSortDirection("desc")
-        return option
-      }
-    })
-    setShowSortOptions(false)
-  }, [])
-
-  const getSortIcon = useCallback(
-    (option: "level" | "income" | "cost") => {
-      if (sortOption !== option) return null
-      return sortDirection === "asc" ? (
-        <FontAwesomeIcon icon={icons.chevronUp} className="ml-1 text-xs" />
-      ) : (
-        <FontAwesomeIcon icon={icons.chevronDown} className="ml-1 text-xs" />
-      )
-    },
-    [sortOption, sortDirection],
-  )
 
   const closeSuccessPopup = useCallback(() => {
     setShowSuccessPopup(false)
   }, [])
 
   if (isLoading || userLoading) {
-    return <SkeletonLoading />
+    return <SkeletonLoading />;
   }
 
   return (
@@ -704,5 +661,5 @@ export default function MinePage() {
 
       <Navbar />
     </main>
-  )
+  );
 }

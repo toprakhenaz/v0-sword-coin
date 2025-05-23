@@ -9,8 +9,15 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Sword Coin",
   description: "Earn coins by tapping and upgrading your equipment",
-  generator: "v0.dev",
-  viewport: "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no",
+  generator: "Next.js",
+}
+
+// Viewport'u ayrı export olarak tanımla
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  userScalable: false,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
