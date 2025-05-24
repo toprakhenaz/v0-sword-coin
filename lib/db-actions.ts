@@ -73,10 +73,125 @@ export async function getOrCreateUser(telegramId: string, username: string) {
   return user
 }
 
+// getOrCreateDailyCombo fonksiyonunu değiştir (satır 1070-1150 civarı)
+export async function getOrCreateDailyCombo(userId?: string) {
+  const supabase = createServerClient()
+  const today = new Date().toISOString().split("T")[0]
+
+  try {
+    // Get or create global daily combo for today
+    let { data: globalCombo, error: globalError } = await supabase
+      .from("global_daily_combo")
+      .select("*")
+      .eq("combo_date", today)
+      .single()
+
+    if (globalError && globalError.code === "PGRST116") {
+      // Create new global combo
+      const { data: items } = await supabase
+        .from("items")
+        .select("id")
+      
+      const validCardIds = items ? items.map(item => item.id) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      
+      // Select 3 random cards
+      const selectedCardIds: number[] = []
+      const tempIds = [...validCardIds]
+      
+      for (let i = 0; i < 3 && tempIds.length > 0; i++) {
+        const randomIndex = Math.floor(Math.random() * tempIds.length)
+        selectedCardIds.push(tempIds[randomIndex])
+        tempIds.splice(randomIndex, 1)
+      }
+      
+      const { data: newCombo, error: createError } = await supabase
+        .from("global_daily_combo")
+        .insert([{
+          combo_date: today,
+          card_ids: selectedCardIds,
+          reward: 100000
+        }])
+        .select()
+        .single()
+      
+      if (createError) {
+        console.error("Error creating global daily combo:", createError)
+        return null
+      }
+      
+      globalCombo = newCombo
+    }
+
+    if (!globalCombo) return null
+
+    // If userId provided, get user's progress
+    if (userId) {
+      const { data: userProgress } = await supabase
+        .from("user_daily_combo_progress")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("combo_date", today)
+        .single()
+
+      return {
+        card_ids: globalCombo.card_ids,
+        found_card_ids: userProgress?.found_card_ids || [],
+        reward: globalCombo.reward,
+        is_completed: userProgress?.is_completed || false
+      }
+    }
+
+    return {
+      card_ids: globalCombo.card_ids,
+      found_card_ids: [],
+      reward: globalCombo.reward,
+      is_completed: false
+    }
+  } catch (error) {
+    console.error("Error in getOrCreateDailyCombo:", error)
+    return null
+  }
+}
+
+// Task'ları veritabanından çek
+export async function getAllTasks() {
+  const supabase = createServerClient()
+  
+  const { data: tasks, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .order("id", { ascending: true })
+
+  if (error) {
+    console.error("Error fetching tasks:", error)
+    return []
+  }
+
+  return tasks
+}
+
+// Items'ları veritabanından çek
+export async function getAllItems() {
+  const supabase = createServerClient()
+  
+  const { data: items, error } = await supabase
+    .from("items")
+    .select("*")
+    .order("id", { ascending: true })
+
+  if (error) {
+    console.error("Error fetching items:", error)
+    return []
+  }
+
+  return items
+}
+
+// lib/db-actions.ts - updateUserCoins fonksiyonunu güncelle (satır 65 civarı)
 export async function updateUserCoins(userId: string, amount: number, transactionType: string, description?: string) {
   const supabase = createServerClient()
   try {
-    // First, update the user's coins
+    // Get current user coins
     const { data: userData, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
 
     if (userError) {
@@ -84,28 +199,31 @@ export async function updateUserCoins(userId: string, amount: number, transactio
       return null
     }
 
-    const newCoins = Math.max(0, userData.coins + amount) // Prevent negative coins
+    // coins değerini number olarak al
+    const currentCoins = parseFloat(userData.coins) || 0
+    
+    // Yeni coin miktarını hesapla ve tam sayıya yuvarla
+    const newCoins = Math.floor(Math.max(0, currentCoins + amount))
 
     const { error: updateError } = await supabase
       .from("users")
       .update({
-        coins: newCoins,
-        // updated_at alanını kaldırdık - PostgreSQL trigger ile otomatik güncellenecek
+        coins: newCoins
       })
       .eq("id", userId)
 
     if (updateError) {
-      // Check if this is a rate limit error
+      // Rate limit kontrolü
       if (updateError.message && updateError.message.includes("Too Many Requests")) {
         console.warn("Rate limit hit when updating coins. Using local value.")
-        return null // Return null to indicate rate limiting
+        return null
       }
 
       console.error("Error updating user coins:", updateError)
       return null
     }
 
-    // Then, log the transaction (but don't fail if this part fails)
+    // Transaction kaydı - opsiyonel
     try {
       await supabase.from("coin_transactions").insert([
         {
@@ -116,16 +234,14 @@ export async function updateUserCoins(userId: string, amount: number, transactio
         },
       ])
     } catch (transactionError) {
-      // Just log the error but don't fail the whole operation
       console.error("Error logging coin transaction:", transactionError)
     }
 
     return newCoins
   } catch (error) {
-    // Handle JSON parsing errors that occur with rate limiting
     if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
       console.warn("Rate limit hit when updating coins (JSON parse error). Using local value.")
-      return null // Return null to indicate rate limiting
+      return null
     }
 
     console.error("Error in updateUserCoins:", error)
@@ -882,219 +998,103 @@ export async function resetDailyBoosts() {
 
 // Add these new functions for the daily combo system
 
-// Get or create daily combo - Now returns the global combo, not user-specific
-export async function getOrCreateDailyCombo(userId?: string) {
-  const supabase = createServerClient()
-  const today = new Date().toISOString().split("T")[0]
-
-  // Get global daily combo for today
-  const { data: globalCombo, error: globalError } = await supabase
-    .from("global_daily_combo")
-    .select("*")
-    .eq("combo_date", today)
-    .single()
-
-  if (!globalError && globalCombo) {
-    // If user ID is provided, get user's progress
-    if (userId) {
-      const { data: userProgress } = await supabase
-        .from("daily_combo")
-        .select("found_card_ids, is_completed")
-        .eq("user_id", userId)
-        .eq("day_date", today)
-        .single()
-
-      return {
-        card_ids: globalCombo.card_ids,
-        found_card_ids: userProgress?.found_card_ids || [],
-        reward: globalCombo.reward,
-        is_completed: userProgress?.is_completed || false,
-      }
-    }
-
-    return {
-      card_ids: globalCombo.card_ids,
-      found_card_ids: [],
-      reward: globalCombo.reward,
-      is_completed: false,
-    }
-  }
-
-  // Create new global combo for today
-  const { data: validCards } = await supabase.from("items").select("id")
-  let validCardIds = validCards ? validCards.map((card) => card.id) : []
-
-  if (validCardIds.length === 0) {
-    validCardIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-  }
-
-  // Get recent global combos
-  const { data: recentCombos } = await supabase
-    .from("global_daily_combo")
-    .select("card_ids")
-    .gt("combo_date", new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
-    .order("combo_date", { ascending: false })
-
-  const recentCardIds = recentCombos ? recentCombos.flatMap((combo) => combo.card_ids) : []
-
-  // Select 3 random cards
-  const selectedCardIds: number[] = []
-  let attempts = 0
-
-  while (selectedCardIds.length < 3 && attempts < 20) {
-    const randomIndex = Math.floor(Math.random() * validCardIds.length)
-    const cardId = validCardIds[randomIndex]
-
-    if (!selectedCardIds.includes(cardId) && (!recentCardIds.includes(cardId) || attempts > 10)) {
-      selectedCardIds.push(cardId)
-    }
-
-    attempts++
-  }
-
-  // Create global combo
-  const { data: newGlobalCombo, error: createError } = await supabase
-    .from("global_daily_combo")
-    .insert([
-      {combo_date: today,
-        card_ids: selectedCardIds,
-        reward: 100000,
-      },
-    ])
-    .select()
-    .single()
-
-  if (createError) {
-    console.error("Error creating global daily combo:", createError)
-    return null
-  }
-
-  if (userId) {
-    // Create user's combo progress
-    await supabase.from("daily_combo").insert([
-      {
-        user_id: userId,
-        day_date: today,
-        card_ids: selectedCardIds,
-        found_card_ids: [],
-        reward: 100000,
-        is_completed: false,
-      },
-    ])
-  }
-
-  return {
-    card_ids: selectedCardIds,
-    found_card_ids: [],
-    reward: 100000,
-    is_completed: false,
-  }
-}
 
 // Get user's daily combo
 export async function getUserDailyCombo(userId: string) {
   return getOrCreateDailyCombo(userId)
 }
 
-// Find a card in the daily combo
+// findDailyComboCard fonksiyonunu güncelle (satır 1200 civarı)
 export async function findDailyComboCard(userId: string, cardIndex: number) {
   const supabase = createServerClient()
   const today = new Date().toISOString().split("T")[0]
 
-  // Get global combo
-  const { data: globalCombo } = await supabase
-    .from("global_daily_combo")
-    .select("card_ids, reward")
-    .eq("combo_date", today)
-    .single()
-
-  if (!globalCombo) {
-    return { success: false, message: "Daily combo not found" }
-  }
-
-  // Check if card index is valid
-  if (cardIndex < 0 || cardIndex >= globalCombo.card_ids.length) {
-    return { success: false, message: "Invalid card index" }
-  }
-
-  const cardId = globalCombo.card_ids[cardIndex]
-
-  // Get or create user's combo progress
-  let { data: userCombo, error: comboError } = await supabase
-    .from("daily_combo")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("day_date", today)
-    .single()
-
-  if (comboError && comboError.code === "PGRST116") {
-    // Create user combo if doesn't exist
-    const { data: newCombo } = await supabase
-      .from("daily_combo")
-      .insert([
-        {
-          user_id: userId,
-          day_date: today,
-          card_ids: globalCombo.card_ids,
-          found_card_ids: [],
-          reward: globalCombo.reward,
-          is_completed: false,
-        },
-      ])
-      .select()
+  try {
+    // Get global combo
+    const { data: globalCombo } = await supabase
+      .from("global_daily_combo")
+      .select("*")
+      .eq("combo_date", today)
       .single()
 
-    userCombo = newCombo
-  }
-
-  if (!userCombo) {
-    return { success: false, message: "Failed to create user combo progress" }
-  }
-
-  // Check if card is already found
-  if (userCombo.found_card_ids.includes(cardId)) {
-    return {
-      success: false,
-      message: "Card already found",
-      cardId,
-      foundCardIds: userCombo.found_card_ids,
-      isCompleted: userCombo.is_completed,
+    if (!globalCombo) {
+      return { success: false, message: "Daily combo not found" }
     }
-  }
 
-  // Add card to found cards
-  const newFoundCards = [...userCombo.found_card_ids, cardId]
-  const isCompleted = newFoundCards.length === globalCombo.card_ids.length
+    const cardId = globalCombo.card_ids[cardIndex]
 
-  // Update combo
-  const updateData: any = {
-    found_card_ids: newFoundCards,
-    updated_at: new Date().toISOString(),
-  }
+    // Get or create user progress
+    let { data: userProgress } = await supabase
+      .from("user_daily_combo_progress")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("combo_date", today)
+      .single()
 
-  if (isCompleted) {
-    updateData.is_completed = true
-    updateData.completed_at = new Date().toISOString()
-  }
+    if (!userProgress) {
+      // Create new progress
+      const { data: newProgress } = await supabase
+        .from("user_daily_combo_progress")
+        .insert([{
+          user_id: userId,
+          combo_date: today,
+          found_card_ids: []
+        }])
+        .select()
+        .single()
+      
+      userProgress = newProgress
+    }
 
-  const { error: updateError } = await supabase.from("daily_combo").update(updateData).eq("id", userCombo.id)
+    if (!userProgress) {
+      return { success: false, message: "Failed to create progress" }
+    }
 
-  if (updateError) {
-    console.error("Error updating daily combo:", updateError)
-    return { success: false, message: "Error updating daily combo" }
-  }
+    // Check if already found
+    if (userProgress.found_card_ids.includes(cardId)) {
+      return {
+        success: false,
+        message: "Card already found",
+        cardId,
+        foundCardIds: userProgress.found_card_ids,
+        isCompleted: userProgress.is_completed
+      }
+    }
 
-  // If combo is completed, give reward
-  if (isCompleted) {
-    await updateUserCoins(userId, globalCombo.reward, "daily_combo", "Completed daily combo")
-  }
+    // Add to found cards
+    const newFoundCards = [...userProgress.found_card_ids, cardId]
+    const isCompleted = newFoundCards.length === globalCombo.card_ids.length
 
-  return {
-    success: true,
-    cardId,
-    foundCardIds: newFoundCards,
-    isCompleted,
-    reward: isCompleted ? globalCombo.reward : 0,
+    // Update progress
+    const { error: updateError } = await supabase
+      .from("user_daily_combo_progress")
+      .update({
+        found_card_ids: newFoundCards,
+        is_completed: isCompleted,
+        completed_at: isCompleted ? new Date().toISOString() : null
+      })
+      .eq("id", userProgress.id)
+
+    if (updateError) {
+      console.error("Error updating progress:", updateError)
+      return { success: false, message: "Error updating progress" }
+    }
+
+    // Give reward if completed
+    if (isCompleted) {
+      await updateUserCoins(userId, globalCombo.reward, "daily_combo", "Completed daily combo")
+    }
+
+    return {
+      success: true,
+      cardId,
+      foundCardIds: newFoundCards,
+      isCompleted,
+      reward: isCompleted ? globalCombo.reward : 0
+    }
+  } catch (error) {
+    console.error("Error in findDailyComboCard:", error)
+    return { success: false, message: "An error occurred" }
   }
 }
 

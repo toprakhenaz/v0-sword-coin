@@ -29,29 +29,32 @@ export default function TaskCard({
   onClick,
 }: TaskCardProps) {
   // Get platform icon and color
-  const getPlatformStyle = () => {
-    switch (platform.toLowerCase()) {
-      case "youtube":
-        return { bgColor: "#FF0000", icon: icons.youtube }
-      case "twitter":
-        return { bgColor: "#000000", icon: icons.twitter }
-      case "telegram":
-        return { bgColor: "#0088cc", icon: icons.telegram }
-      case "instagram":
-        return { bgColor: "#E1306C", icon: icons.instagram }
-      case "facebook":
-        return { bgColor: "#1877F2", icon: icons.facebook }
-      case "linkedin":
-        return { bgColor: "#0077B5", icon: icons.linkedin }
-      case "binance":
-        return { bgColor: "#F0B90B", icon: icons.coins }
-      case "swordcoin":
-        return { bgColor: "#6366F1", icon: icons.swords }
-      default:
-        return { bgColor: "#6366F1", icon: icons.globe }
-    }
-  }
+  // components/Earn/TaskCard.tsx - getPlatformStyle fonksiyonunu güncelle (satır 28 civarı)
 
+const getPlatformStyle = () => {
+  const platformName = (platform || "").toLowerCase() // undefined kontrolü
+  
+  switch (platformName) {
+    case "youtube":
+      return { bgColor: "#FF0000", icon: icons.youtube }
+    case "twitter":
+      return { bgColor: "#000000", icon: icons.twitter }
+    case "telegram":
+      return { bgColor: "#0088cc", icon: icons.telegram }
+    case "instagram":
+      return { bgColor: "#E1306C", icon: icons.instagram }
+    case "facebook":
+      return { bgColor: "#1877F2", icon: icons.facebook }
+    case "linkedin":
+      return { bgColor: "#0077B5", icon: icons.linkedin }
+    case "binance":
+      return { bgColor: "#F0B90B", icon: icons.coins }
+    case "swordcoin":
+      return { bgColor: "#6366F1", icon: icons.swords }
+    default:
+      return { bgColor: "#6366F1", icon: icons.globe }
+  }
+}
   const platformStyle = getPlatformStyle()
 
   const handleClick = () => {

@@ -582,26 +582,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
 
     if (userId && hourlyEarn > 0) {
-      // Calculate coins per second
+      // Coins per second hesapla
       const coinsPerSecond = hourlyEarn / 3600
 
-      // Update coins every second
+      // Her saniye local state'i güncelle
       hourlyEarnIntervalRef.current = setInterval(() => {
         setTotalHourlyCoins((prev) => {
           const newTotal = prev + coinsPerSecond
           return newTotal
         })
 
-        // Update displayed coins immediately
-        setCoins((prev) => prev + coinsPerSecond)
-
-        // Add to update queue for periodic database sync
-        coinUpdateQueue.current.push({
-          amount: coinsPerSecond,
-          transactionType: "hourly_passive",
-          description: "Passive hourly earnings",
-        })
-      }, 1000) // Update every second
+        // Displayed coins'i güncelle (tam sayı olarak)
+        setCoins((prev) => Math.floor(prev + coinsPerSecond))
+      }, 1000)
     }
 
     return () => {
@@ -611,17 +604,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, hourlyEarn])
 
-  // Sync hourly earnings to database periodically
+  
+  // Sync hourly earnings to database periodically - daha uzun aralıklarla
   useEffect(() => {
     const syncHourlyEarnings = async () => {
       if (!userId || totalHourlyCoins === 0) return
 
       try {
+        const roundedCoins = Math.floor(totalHourlyCoins)
+        
         await supabase
           .from("users")
           .update({
-            total_hourly_coins: totalHourlyCoins,
-            updated_at: new Date().toISOString(),
+            total_hourly_coins: roundedCoins
           })
           .eq("id", userId)
       } catch (error) {
@@ -629,8 +624,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Sync every 30 seconds
-    const syncInterval = setInterval(syncHourlyEarnings, 30000)
+    // Her 2 dakikada bir sync et (30 saniye yerine)
+    const syncInterval = setInterval(syncHourlyEarnings, 120000)
 
     return () => clearInterval(syncInterval)
   }, [userId, totalHourlyCoins])

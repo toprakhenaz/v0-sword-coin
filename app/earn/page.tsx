@@ -268,39 +268,33 @@ export default function EarnPage() {
     }
   }
 
-  const handleClaimReward = async (taskId: number) => {
-    // Find the task
-    const task = tasks.find((t) => t.id === taskId)
-    if (!task || task.progress !== 100 || task.isCompleted || !userId) return
+  // handleClaimReward fonksiyonunu değiştir (satır 186-220 civarı)
+const handleClaimReward = async (taskId: number) => {
+  const task = tasks.find((t) => t.id === taskId)
+  if (!task || task.progress !== 100 || task.isCompleted || !userId) return
 
-    try {
-      const result = await completeTask(userId, taskId)
-      
-      if (result.success) {
-        // Update task as completed locally
-        const updatedTasks = tasks.map((t) => {
-          if (t.id === taskId) {
-            return { ...t, isCompleted: true }
-          }
-          return t
-        })
-        setTasks(updatedTasks)
+  try {
+    const result = await completeTask(userId, taskId)
+    
+    if (result.success) {
+      // Task'ı tamamlanmış olarak işaretle ve listeden kaldır
+      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId))
 
-        // Add tokens to user
-        await updateCoins(result.reward || task.reward, "task_reward", `Completed task ${taskId}`)
+      // Coins güncelle
+      await updateCoins(result.reward || task.reward, "task_reward", `Completed task ${taskId}`)
 
-        // Show success popup
-        setPopupData({
-          title: "Task Completed!",
-          message: `You earned ${(result.reward || task.reward).toLocaleString()} tokens!`,
-          image: "/coin.png",
-        })
-        setShowPopup(true)
-      }
-    } catch (error) {
-      console.error("Error completing task:", error)
+      // Başarı popup'ı göster
+      setPopupData({
+        title: "Task Completed!",
+        message: `You earned ${(result.reward || task.reward).toLocaleString()} tokens!`,
+        image: "/coin.png",
+      })
+      setShowPopup(true)
     }
+  } catch (error) {
+    console.error("Error completing task:", error)
   }
+}
 
   const handleTaskAction = (taskId: number) => {
     const task = tasks.find((t) => t.id === taskId)

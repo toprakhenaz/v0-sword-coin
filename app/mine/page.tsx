@@ -11,6 +11,8 @@ import { supabase } from "@/lib/supabase"
 import { useUser } from "@/context/UserContext"
 // Import the TimeBar component at the top of the file
 import TimeBar from "@/components/TimeBar"
+import { getAllItems } from "@/lib/db-actions"
+
 
 interface CardItem {
   id: number
@@ -205,6 +207,7 @@ export default function MinePage() {
   const [dailyComboCards, setDailyComboCards] = useState([1, 2, 3]) // Card IDs for daily combo
   const [foundCards, setFoundCards] = useState<number[]>([1]) // Found card IDs
 
+
   // Map Turkish category names to English - memoize to prevent re-creation
   const categoryMapping = useMemo(
     () => ({
@@ -245,11 +248,11 @@ export default function MinePage() {
     try {
       setIsLoading(true)
 
-      // First, get all available items
-      const { data: items, error: itemsError } = await supabase.from("items").select("*")
+      // Veritabanından items'ları al
+      const items = await getAllItems()
 
-      if (itemsError) {
-        console.error("Error fetching items:", itemsError)
+      if (!items || items.length === 0) {
+        console.error("No items found")
         setIsLoading(false)
         return
       }
