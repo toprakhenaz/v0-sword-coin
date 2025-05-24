@@ -7,7 +7,7 @@ import { useLeagueData } from "@/data/GeneralData"
 import { formatNumber } from "@/lib/utils"
 
 export default function CoinDisplay({ coins, league, onclick }: CoinDisplayProps) {
-  const { getLeagueImage, getLeagueColors, getLeagueName } = useLeagueData()
+  const { getLeagueColors, getLeagueName } = useLeagueData()
   const colors = getLeagueColors(league)
 
   return (

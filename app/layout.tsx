@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script async src="https://telegram.org/js/telegram-web-app.js"></script>
       </head>
       <body className={`${inter.className} telegram-theme ios-safe-area-bottom`}>
         <UserProvider>{children}</UserProvider>

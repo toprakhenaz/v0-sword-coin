@@ -7,7 +7,6 @@ import { useLeagueData } from "@/data/GeneralData"
 
 export default function Header({ earnPerTap, coinsToLevelUp, hourlyEarn }: HeaderProps) {
   const { getLeagueColors } = useLeagueData()
-  const colors = getLeagueColors(6) // Default colors for league 6
 
   return (
     <div className="bg-[#0d1220] rounded-xl p-4 shadow-lg mb-4">

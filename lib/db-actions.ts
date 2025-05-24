@@ -33,6 +33,7 @@ export async function createUser(telegramId: string, username: string) {
         max_energy: 100,
         last_energy_regen: new Date().toISOString(),
         last_hourly_collect: new Date().toISOString(),
+        total_hourly_coins: 0,
       },
     ])
     .select()
@@ -72,7 +73,6 @@ export async function getOrCreateUser(telegramId: string, username: string) {
   return user
 }
 
-// Add this function to handle rate limiting errors
 export async function updateUserCoins(userId: string, amount: number, transactionType: string, description?: string) {
   const supabase = createServerClient()
   try {
@@ -90,7 +90,7 @@ export async function updateUserCoins(userId: string, amount: number, transactio
       .from("users")
       .update({
         coins: newCoins,
-        updated_at: new Date().toISOString(),
+        // updated_at alanını kaldırdık - PostgreSQL trigger ile otomatik güncellenecek
       })
       .eq("id", userId)
 
@@ -133,6 +133,288 @@ export async function updateUserCoins(userId: string, amount: number, transactio
   }
 }
 
+export async function updateUserEnergy(userId: string, amount: number) {
+  const supabase = createServerClient()
+  try {
+    // First, get current energy
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("energy, max_energy")
+      .eq("id", userId)
+      .single()
+
+    if (userError) {
+      console.error("Error fetching user energy:", userError)
+      return null
+    }
+
+    // Calculate new energy (never below 0 or above max)
+    const newEnergy = Math.max(0, Math.min(userData.max_energy, userData.energy + amount))
+
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({
+        energy: newEnergy,
+        // last_energy_regen alanını da kaldırdık
+      })
+      .eq("id", userId)
+
+    if (updateError) {
+      // Check if this is a rate limit error
+      if (updateError.message && updateError.message.includes("Too Many Requests")) {
+        console.warn("Rate limit hit when updating energy. Using local value.")
+        return null // Return null to indicate rate limiting
+      }
+
+      console.error("Error updating user energy:", updateError)
+      return null
+    }
+
+    return newEnergy
+  } catch (error) {
+    // Handle JSON parsing errors that occur with rate limiting
+    if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
+      console.warn("Rate limit hit when updating energy (JSON parse error). Using local value.")
+      return null // Return null to indicate rate limiting
+    }
+
+    console.error("Error in updateUserEnergy:", error)
+    throw error
+  }
+}
+
+export async function upgradeBoost(userId: string, boostType: string) {
+  const supabase = createServerClient()
+
+  // Get user details
+  const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
+
+  if (userError) {
+    console.error("Error fetching user:", userError)
+    return { success: false, message: "User not found" }
+  }
+
+  // Get current boost level
+  const { data: boost, error: boostError } = await supabase
+    .from("user_boosts")
+    .select("*")
+    .eq("user_id", userId)
+    .single()
+
+  if (boostError) {
+    console.error("Error fetching user boosts:", boostError)
+    return { success: false, message: "Boosts not found" }
+  }
+
+  // Determine which boost to upgrade and calculate cost
+  const updateData: any = {} // updated_at alanını kaldırdık
+  let newLevel = 0
+  let cost = 0
+
+  switch (boostType) {
+    case "multiTouch":
+      newLevel = boost.multi_touch_level + 1
+      cost = 2000 * Math.pow(1.5, boost.multi_touch_level - 1)
+      updateData.multi_touch_level = newLevel
+      break
+    case "energyLimit":
+      newLevel = boost.energy_limit_level + 1
+      cost = 2000 * Math.pow(1.5, boost.energy_limit_level - 1)
+      updateData.energy_limit_level = newLevel
+      break
+    case "chargeSpeed":
+      newLevel = boost.charge_speed_level + 1
+      cost = 2000 * Math.pow(1.5, boost.charge_speed_level - 1)
+      updateData.charge_speed_level = newLevel
+      break
+    default:
+      return { success: false, message: "Invalid boost type" }
+  }
+
+  // Check if user has enough coins
+  if (user.coins < cost) {
+    return { success: false, message: "Not enough coins" }
+  }
+
+  // Update boost
+  const { error: updateError } = await supabase.from("user_boosts").update(updateData).eq("user_id", userId)
+
+  if (updateError) {
+    console.error("Error upgrading boost:", updateError)
+    return { success: false, message: "Error upgrading boost" }
+  }
+
+  // Deduct coins from user
+  await updateUserCoins(userId, -cost, "boost_upgrade", `Upgraded ${boostType} to level ${newLevel}`)
+
+  // If it's multiTouch, update user's earn_per_tap
+  if (boostType === "multiTouch") {
+    await supabase
+      .from("users")
+      .update({
+        earn_per_tap: 1 + (newLevel - 1) * 2,
+      })
+      .eq("id", userId)
+  }
+
+  // If it's energyLimit, update user's max_energy
+  if (boostType === "energyLimit") {
+    await supabase
+      .from("users")
+      .update({
+        max_energy: 100 + (newLevel - 1) * 500,
+      })
+      .eq("id", userId)
+  }
+
+  return { success: true, newLevel, cost: Math.floor(cost * 1.5) }
+}
+
+export async function useRocketBoost(userId: string) {
+  const supabase = createServerClient()
+
+  // Get user boosts
+  const { data: boost, error: boostError } = await supabase
+    .from("user_boosts")
+    .select("daily_rockets")
+    .eq("user_id", userId)
+    .single()
+
+  if (boostError) {
+    console.error("Error fetching user boosts:", boostError)
+    return { success: false, message: "Boosts not found" }
+  }
+
+  // Check if user has rockets left
+  if (boost.daily_rockets <= 0) {
+    return { success: false, message: "No rockets left" }
+  }
+
+  // Update rockets count
+  const { error: updateError } = await supabase
+    .from("user_boosts")
+    .update({
+      daily_rockets: boost.daily_rockets - 1,
+    })
+    .eq("user_id", userId)
+
+  if (updateError) {
+    console.error("Error using rocket:", updateError)
+    return { success: false, message: "Error using rocket" }
+  }
+
+  // Add energy to user
+  await updateUserEnergy(userId, 500)
+
+  return { success: true, rocketsLeft: boost.daily_rockets - 1 }
+}
+
+export async function useFullEnergyBoost(userId: string) {
+  const supabase = createServerClient()
+
+  // Get user boosts
+  const { data: boost, error: boostError } = await supabase
+    .from("user_boosts")
+    .select("energy_full_used")
+    .eq("user_id", userId)
+    .single()
+
+  if (boostError) {
+    console.error("Error fetching user boosts:", boostError)
+    return { success: false, message: "Boosts not found" }
+  }
+
+  // Check if user has already used full energy today
+  if (boost.energy_full_used) {
+    return { success: false, message: "Full energy already used today" }
+  }
+
+  // Update energy_full_used
+  const { error: updateError } = await supabase
+    .from("user_boosts")
+    .update({
+      energy_full_used: true,
+    })
+    .eq("user_id", userId)
+
+  if (updateError) {
+    console.error("Error using full energy:", updateError)
+    return { success: false, message: "Error using full energy" }
+  }
+
+  // Get user's max energy
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("energy, max_energy")
+    .eq("id", userId)
+    .single()
+
+  if (userError) {
+    console.error("Error fetching user:", userError)
+    return { success: false, message: "User not found" }
+  }
+
+  // Fill user's energy to max
+  await updateUserEnergy(userId, user.max_energy - user.energy)
+
+  return { success: true }
+}
+
+export async function collectHourlyEarnings(userId: string) {
+  const supabase = createServerClient()
+
+  // Get user details
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("hourly_earn, last_hourly_collect")
+    .eq("id", userId)
+    .single()
+
+  if (userError) {
+    console.error("Error fetching user:", userError)
+    return { success: false, message: "User not found" }
+  }
+
+  const now = new Date()
+  const lastCollect = new Date(user.last_hourly_collect)
+  const hoursPassed = (now.getTime() - lastCollect.getTime()) / (1000 * 60 * 60)
+
+  // Check if at least 1 hour has passed
+  if (hoursPassed < 1) {
+    return {
+      success: false,
+      message: "Not enough time has passed",
+      timeLeft: 60 - Math.floor(hoursPassed * 60),
+    }
+  }
+
+  // Calculate coins to collect (max 24 hours)
+  const hoursToCount = Math.min(hoursPassed, 24)
+  const coinsToCollect = Math.floor(user.hourly_earn * hoursToCount)
+
+  // Update last collect time - sadece last_hourly_collect güncelleyelim
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({
+      last_hourly_collect: now.toISOString(),
+    })
+    .eq("id", userId)
+
+  if (updateError) {
+    console.error("Error updating last collect time:", updateError)
+    return { success: false, message: "Error updating last collect time" }
+  }
+
+  // Add coins to user
+  await updateUserCoins(
+    userId,
+    coinsToCollect,
+    "hourly_earnings",
+    `Collected ${hoursToCount.toFixed(1)} hours of earnings`,
+  )
+
+  return { success: true, coins: coinsToCollect, hours: hoursToCount }
+}
 // Item related actions
 export async function getUserItems(userId: string) {
   const supabase = createServerClient()
@@ -157,91 +439,7 @@ export async function getUserItems(userId: string) {
   }
 }
 
-
-
-// Improved collectHourlyEarnings function
-export async function collectHourlyEarnings(userId: string) {
-  const supabase = createServerClient()
-
-  try {
-    // Get user details
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .select("hourly_earn, last_hourly_collect")
-      .eq("id", userId)
-      .single()
-
-    if (userError) {
-      console.error("Error fetching user:", userError)
-      return { success: false, message: "User not found" }
-    }
-
-    const now = new Date()
-    const lastCollect = new Date(user.last_hourly_collect)
-    const hoursPassed = (now.getTime() - lastCollect.getTime()) / (1000 * 60 * 60)
-
-    // Check if at least 1 hour has passed
-    if (hoursPassed < 1) {
-      const minutesLeft = Math.ceil((1 - hoursPassed) * 60)
-      return {
-        success: false,
-        message: "Not enough time has passed",
-        timeLeft: minutesLeft,
-      }
-    }
-
-    // Calculate coins to collect (max 24 hours)
-    const hoursToCount = Math.min(hoursPassed, 24)
-    const coinsToCollect = Math.floor(user.hourly_earn * hoursToCount)
-
-    // If no hourly income, return early
-    if (coinsToCollect === 0) {
-      return {
-        success: false,
-        message: "No hourly income to collect. Buy cards to earn!",
-      }
-    }
-
-    // Update last collect time and add coins
-    const { data: updatedUser, error: updateError } = await supabase
-      .from("users")
-      .update({
-        last_hourly_collect: now.toISOString(),
-        coins: supabase.raw('coins + ?', [coinsToCollect]),
-        updated_at: now.toISOString(),
-      })
-      .eq("id", userId)
-      .select()
-      .single()
-
-    if (updateError) {
-      console.error("Error updating user:", updateError)
-      return { success: false, message: "Error collecting earnings" }
-    }
-
-    // Log transaction
-    await supabase.from("coin_transactions").insert([
-      {
-        user_id: userId,
-        amount: coinsToCollect,
-        transaction_type: "hourly_earnings",
-        description: `Collected ${hoursToCount.toFixed(1)} hours of earnings`,
-      },
-    ])
-
-    return { 
-      success: true, 
-      coins: coinsToCollect, 
-      hours: hoursToCount,
-      newTotal: updatedUser.coins
-    }
-  } catch (error) {
-    console.error("Error in collectHourlyEarnings:", error)
-    return { success: false, message: "An unexpected error occurred" }
-  }
-}
-
-// Update user's total hourly earn based on their items
+// Calculate and update user's total hourly earn
 export async function updateUserHourlyEarn(userId: string) {
   const supabase = createServerClient()
 
@@ -260,13 +458,10 @@ export async function updateUserHourlyEarn(userId: string) {
     // Calculate total hourly earn
     const totalHourlyEarn = userItems.reduce((total, item) => total + item.hourly_income, 0)
 
-    // Update user's hourly_earn
+    // Update user
     const { error: updateError } = await supabase
       .from("users")
-      .update({ 
-        hourly_earn: totalHourlyEarn, 
-        updated_at: new Date().toISOString() 
-      })
+      .update({ hourly_earn: totalHourlyEarn, updated_at: new Date().toISOString() })
       .eq("id", userId)
 
     if (updateError) {
@@ -279,7 +474,6 @@ export async function updateUserHourlyEarn(userId: string) {
     return 0
   }
 }
-
 
 export async function upgradeItem(userId: string, itemId: number) {
   const supabase = createServerClient()
@@ -432,7 +626,7 @@ export async function getUserTasks(userId: string) {
   return data
 }
 
-export async function startTask(userId: string, taskId: number) {
+export async function startTask(userId: string, taskId: number, taskUrl?: string) {
   const supabase = createServerClient()
 
   // Check if user task exists
@@ -465,7 +659,7 @@ export async function startTask(userId: string, taskId: number) {
       return { success: false, message: "Error updating task" }
     }
 
-    return { success: true, progress: newProgress, userTaskId: existingTask.id }
+    return { success: true, progress: newProgress, userTaskId: existingTask.id, url: taskUrl }
   } else {
     // Create new user task
     const { data: newTask, error: createError } = await supabase
@@ -485,7 +679,7 @@ export async function startTask(userId: string, taskId: number) {
       return { success: false, message: "Error creating task" }
     }
 
-    return { success: true, progress: 50, userTaskId: newTask.id }
+    return { success: true, progress: 50, userTaskId: newTask.id, url: taskUrl }
   }
 }
 
@@ -555,56 +749,7 @@ export async function getUserDailyRewards(userId: string) {
   return data
 }
 
-// Similarly update the energy function to handle rate limiting
-export async function updateUserEnergy(userId: string, amount: number) {
-  const supabase = createServerClient()
-  try {
-    // First, get current energy
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("energy, max_energy")
-      .eq("id", userId)
-      .single()
 
-    if (userError) {
-      console.error("Error fetching user energy:", userError)
-      return null
-    }
-
-    // Calculate new energy (never below 0 or above max)
-    const newEnergy = Math.max(0, Math.min(userData.max_energy, userData.energy + amount))
-
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({
-        energy: newEnergy,
-        last_energy_regen: new Date().toISOString(),
-      })
-      .eq("id", userId)
-
-    if (updateError) {
-      // Check if this is a rate limit error
-      if (updateError.message && updateError.message.includes("Too Many Requests")) {
-        console.warn("Rate limit hit when updating energy. Using local value.")
-        return null // Return null to indicate rate limiting
-      }
-
-      console.error("Error updating user energy:", updateError)
-      return null
-    }
-
-    return newEnergy
-  } catch (error) {
-    // Handle JSON parsing errors that occur with rate limiting
-    if (error instanceof SyntaxError && error.message.includes("Unexpected token")) {
-      console.warn("Rate limit hit when updating energy (JSON parse error). Using local value.")
-      return null // Return null to indicate rate limiting
-    }
-
-    console.error("Error in updateUserEnergy:", error)
-    throw error
-  }
-}
 
 // Boost related actions
 export async function getUserBoosts(userId: string) {
@@ -619,186 +764,6 @@ export async function getUserBoosts(userId: string) {
   return data
 }
 
-export async function upgradeBoost(userId: string, boostType: string) {
-  const supabase = createServerClient()
-
-  // Get user details
-  const { data: user, error: userError } = await supabase.from("users").select("coins").eq("id", userId).single()
-
-  if (userError) {
-    console.error("Error fetching user:", userError)
-    return { success: false, message: "User not found" }
-  }
-
-  // Get current boost level
-  const { data: boost, error: boostError } = await supabase
-    .from("user_boosts")
-    .select("*")
-    .eq("user_id", userId)
-    .single()
-
-  if (boostError) {
-    console.error("Error fetching user boosts:", boostError)
-    return { success: false, message: "Boosts not found" }
-  }
-
-  // Determine which boost to upgrade and calculate cost
-  const updateData: any = { updated_at: new Date().toISOString() }
-  let newLevel = 0
-  let cost = 0
-
-  switch (boostType) {
-    case "multiTouch":
-      newLevel = boost.multi_touch_level + 1
-      cost = 2000 * Math.pow(1.5, boost.multi_touch_level - 1)
-      updateData.multi_touch_level = newLevel
-      break
-    case "energyLimit":
-      newLevel = boost.energy_limit_level + 1
-      cost = 2000 * Math.pow(1.5, boost.energy_limit_level - 1)
-      updateData.energy_limit_level = newLevel
-      break
-    case "chargeSpeed":
-      newLevel = boost.charge_speed_level + 1
-      cost = 2000 * Math.pow(1.5, boost.charge_speed_level - 1)
-      updateData.charge_speed_level = newLevel
-      break
-    default:
-      return { success: false, message: "Invalid boost type" }
-  }
-
-  // Check if user has enough coins
-  if (user.coins < cost) {
-    return { success: false, message: "Not enough coins" }
-  }
-
-  // Update boost
-  const { error: updateError } = await supabase.from("user_boosts").update(updateData).eq("user_id", userId)
-
-  if (updateError) {
-    console.error("Error upgrading boost:", updateError)
-    return { success: false, message: "Error upgrading boost" }
-  }
-
-  // Deduct coins from user
-  await updateUserCoins(userId, -cost, "boost_upgrade", `Upgraded ${boostType} to level ${newLevel}`)
-
-  // If it's multiTouch, update user's earn_per_tap
-  if (boostType === "multiTouch") {
-    await supabase
-      .from("users")
-      .update({
-        earn_per_tap: 1 + (newLevel - 1) * 2,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-  }
-
-  // If it's energyLimit, update user's max_energy
-  if (boostType === "energyLimit") {
-    await supabase
-      .from("users")
-      .update({
-        max_energy: 100 + (newLevel - 1) * 500,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-  }
-
-  return { success: true, newLevel, cost: Math.floor(cost * 1.5) }
-}
-
-export async function useRocketBoost(userId: string) {
-  const supabase = createServerClient()
-
-  // Get user boosts
-  const { data: boost, error: boostError } = await supabase
-    .from("user_boosts")
-    .select("daily_rockets")
-    .eq("user_id", userId)
-    .single()
-
-  if (boostError) {
-    console.error("Error fetching user boosts:", boostError)
-    return { success: false, message: "Boosts not found" }
-  }
-
-  // Check if user has rockets left
-  if (boost.daily_rockets <= 0) {
-    return { success: false, message: "No rockets left" }
-  }
-
-  // Update rockets count
-  const { error: updateError } = await supabase
-    .from("user_boosts")
-    .update({
-      daily_rockets: boost.daily_rockets - 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId)
-
-  if (updateError) {
-    console.error("Error using rocket:", updateError)
-    return { success: false, message: "Error using rocket" }
-  }
-
-  // Add energy to user
-  await updateUserEnergy(userId, 500)
-
-  return { success: true, rocketsLeft: boost.daily_rockets - 1 }
-}
-
-export async function useFullEnergyBoost(userId: string) {
-  const supabase = createServerClient()
-
-  // Get user boosts
-  const { data: boost, error: boostError } = await supabase
-    .from("user_boosts")
-    .select("energy_full_used")
-    .eq("user_id", userId)
-    .single()
-
-  if (boostError) {
-    console.error("Error fetching user boosts:", boostError)
-    return { success: false, message: "Boosts not found" }
-  }
-
-  // Check if user has already used full energy today
-  if (boost.energy_full_used) {
-    return { success: false, message: "Full energy already used today" }
-  }
-
-  // Update energy_full_used
-  const { error: updateError } = await supabase
-    .from("user_boosts")
-    .update({
-      energy_full_used: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId)
-
-  if (updateError) {
-    console.error("Error using full energy:", updateError)
-    return { success: false, message: "Error using full energy" }
-  }
-
-  // Get user's max energy
-  const { data: user, error: userError } = await supabase
-    .from("users")
-    .select("energy, max_energy")
-    .eq("id", userId)
-    .single()
-
-  if (userError) {
-    console.error("Error fetching user:", userError)
-    return { success: false, message: "User not found" }
-  }
-
-  // Fill user's energy to max
-  await updateUserEnergy(userId, user.max_energy - user.energy)
-
-  return { success: true }
-}
 
 // Referral system
 export async function createReferral(referrerId: string, referredId: string) {
@@ -917,54 +882,69 @@ export async function resetDailyBoosts() {
 
 // Add these new functions for the daily combo system
 
-// Get or create daily combo for a user
-export async function getOrCreateDailyCombo(userId: string) {
+// Get or create daily combo - Now returns the global combo, not user-specific
+export async function getOrCreateDailyCombo(userId?: string) {
   const supabase = createServerClient()
   const today = new Date().toISOString().split("T")[0]
 
-  // Check if combo exists for today
-  const { data: existingCombo, error: checkError } = await supabase
-    .from("daily_combo")
+  // Get global daily combo for today
+  const { data: globalCombo, error: globalError } = await supabase
+    .from("global_daily_combo")
     .select("*")
-    .eq("user_id", userId)
-    .eq("day_date", today)
+    .eq("combo_date", today)
     .single()
 
-  if (!checkError && existingCombo) {
-    return existingCombo
+  if (!globalError && globalCombo) {
+    // If user ID is provided, get user's progress
+    if (userId) {
+      const { data: userProgress } = await supabase
+        .from("daily_combo")
+        .select("found_card_ids, is_completed")
+        .eq("user_id", userId)
+        .eq("day_date", today)
+        .single()
+
+      return {
+        card_ids: globalCombo.card_ids,
+        found_card_ids: userProgress?.found_card_ids || [],
+        reward: globalCombo.reward,
+        is_completed: userProgress?.is_completed || false,
+      }
+    }
+
+    return {
+      card_ids: globalCombo.card_ids,
+      found_card_ids: [],
+      reward: globalCombo.reward,
+      is_completed: false,
+    }
   }
 
-  // Get all available items
+  // Create new global combo for today
   const { data: validCards } = await supabase.from("items").select("id")
-
   let validCardIds = validCards ? validCards.map((card) => card.id) : []
 
-  // If no valid cards, use default IDs
   if (validCardIds.length === 0) {
     validCardIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   }
 
-  // Get recent combos for this user
+  // Get recent global combos
   const { data: recentCombos } = await supabase
-    .from("daily_combo")
+    .from("global_daily_combo")
     .select("card_ids")
-    .eq("user_id", userId)
-    .gt("day_date", new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
-    .order("day_date", { ascending: false })
+    .gt("combo_date", new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
+    .order("combo_date", { ascending: false })
 
-  // Identify cards used in recent days
   const recentCardIds = recentCombos ? recentCombos.flatMap((combo) => combo.card_ids) : []
 
-  // Select cards (filtering out recently used ones)
+  // Select 3 random cards
   const selectedCardIds: number[] = []
   let attempts = 0
 
-  // Select 3 cards, preferably ones not used in recent days
   while (selectedCardIds.length < 3 && attempts < 20) {
     const randomIndex = Math.floor(Math.random() * validCardIds.length)
     const cardId = validCardIds[randomIndex]
 
-    // Add if not already selected and not used in last 3 days or if too many attempts
     if (!selectedCardIds.includes(cardId) && (!recentCardIds.includes(cardId) || attempts > 10)) {
       selectedCardIds.push(cardId)
     }
@@ -972,20 +952,26 @@ export async function getOrCreateDailyCombo(userId: string) {
     attempts++
   }
 
-  // Fill in any missing cards
-  while (selectedCardIds.length < 3) {
-    const randomIndex = Math.floor(Math.random() * validCardIds.length)
-    const cardId = validCardIds[randomIndex]
+  // Create global combo
+  const { data: newGlobalCombo, error: createError } = await supabase
+    .from("global_daily_combo")
+    .insert([
+      {combo_date: today,
+        card_ids: selectedCardIds,
+        reward: 100000,
+      },
+    ])
+    .select()
+    .single()
 
-    if (!selectedCardIds.includes(cardId)) {
-      selectedCardIds.push(cardId)
-    }
+  if (createError) {
+    console.error("Error creating global daily combo:", createError)
+    return null
   }
 
-  // Create new daily combo
-  const { data, error } = await supabase
-    .from("daily_combo")
-    .insert([
+  if (userId) {
+    // Create user's combo progress
+    await supabase.from("daily_combo").insert([
       {
         user_id: userId,
         day_date: today,
@@ -995,15 +981,14 @@ export async function getOrCreateDailyCombo(userId: string) {
         is_completed: false,
       },
     ])
-    .select()
-    .single()
-
-  if (error) {
-    console.error("Error creating daily combo:", error)
-    return null
   }
 
-  return data
+  return {
+    card_ids: selectedCardIds,
+    found_card_ids: [],
+    reward: 100000,
+    is_completed: false,
+  }
 }
 
 // Get user's daily combo
@@ -1016,46 +1001,70 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
   const supabase = createServerClient()
   const today = new Date().toISOString().split("T")[0]
 
-  // Get today's combo
-  const { data: combo, error: comboError } = await supabase
+  // Get global combo
+  const { data: globalCombo } = await supabase
+    .from("global_daily_combo")
+    .select("card_ids, reward")
+    .eq("combo_date", today)
+    .single()
+
+  if (!globalCombo) {
+    return { success: false, message: "Daily combo not found" }
+  }
+
+  // Check if card index is valid
+  if (cardIndex < 0 || cardIndex >= globalCombo.card_ids.length) {
+    return { success: false, message: "Invalid card index" }
+  }
+
+  const cardId = globalCombo.card_ids[cardIndex]
+
+  // Get or create user's combo progress
+  let { data: userCombo, error: comboError } = await supabase
     .from("daily_combo")
     .select("*")
     .eq("user_id", userId)
     .eq("day_date", today)
     .single()
 
-  if (comboError) {
-    // If no combo exists for today, create one and try again
-    if (comboError.code === "PGRST116") {
-      await getOrCreateDailyCombo(userId)
-      // Call this function recursively now that the combo exists
-      return findDailyComboCard(userId, cardIndex)
-    }
+  if (comboError && comboError.code === "PGRST116") {
+    // Create user combo if doesn't exist
+    const { data: newCombo } = await supabase
+      .from("daily_combo")
+      .insert([
+        {
+          user_id: userId,
+          day_date: today,
+          card_ids: globalCombo.card_ids,
+          found_card_ids: [],
+          reward: globalCombo.reward,
+          is_completed: false,
+        },
+      ])
+      .select()
+      .single()
 
-    console.error("Error fetching daily combo:", comboError)
-    return { success: false, message: "Daily combo not found" }
+    userCombo = newCombo
   }
 
-  // Check if card index is valid
-  if (cardIndex < 0 || cardIndex >= combo.card_ids.length) {
-    return { success: false, message: "Invalid card index" }
+  if (!userCombo) {
+    return { success: false, message: "Failed to create user combo progress" }
   }
 
   // Check if card is already found
-  const cardId = combo.card_ids[cardIndex]
-  if (combo.found_card_ids.includes(cardId)) {
+  if (userCombo.found_card_ids.includes(cardId)) {
     return {
       success: false,
       message: "Card already found",
       cardId,
-      foundCardIds: combo.found_card_ids,
-      isCompleted: combo.is_completed,
+      foundCardIds: userCombo.found_card_ids,
+      isCompleted: userCombo.is_completed,
     }
   }
 
   // Add card to found cards
-  const newFoundCards = [...combo.found_card_ids, cardId]
-  const isCompleted = newFoundCards.length === combo.card_ids.length
+  const newFoundCards = [...userCombo.found_card_ids, cardId]
+  const isCompleted = newFoundCards.length === globalCombo.card_ids.length
 
   // Update combo
   const updateData: any = {
@@ -1068,7 +1077,7 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
     updateData.completed_at = new Date().toISOString()
   }
 
-  const { error: updateError } = await supabase.from("daily_combo").update(updateData).eq("id", combo.id)
+  const { error: updateError } = await supabase.from("daily_combo").update(updateData).eq("id", userCombo.id)
 
   if (updateError) {
     console.error("Error updating daily combo:", updateError)
@@ -1077,7 +1086,7 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
 
   // If combo is completed, give reward
   if (isCompleted) {
-    await updateUserCoins(userId, combo.reward, "daily_combo", "Completed daily combo")
+    await updateUserCoins(userId, globalCombo.reward, "daily_combo", "Completed daily combo")
   }
 
   return {
@@ -1085,18 +1094,9 @@ export async function findDailyComboCard(userId: string, cardIndex: number) {
     cardId,
     foundCardIds: newFoundCards,
     isCompleted,
-    reward: isCompleted ? combo.reward : 0,
+    reward: isCompleted ? globalCombo.reward : 0,
   }
 }
-
-// Reset daily combo (for cron job)
-export async function resetDailyCombo() {
-  // This would be implemented in a separate cron job
-  // For now, we'll just return success
-  return { success: true }
-}
-
-// Add this function to the existing db-actions.ts file
 
 // Get token listing countdown date
 export async function getTokenListingDate() {
@@ -1125,10 +1125,6 @@ export async function getTokenListingDate() {
   }
 }
 
-// Add these new functions at the end of the file, before the last closing brace
-
-// Replace the getUserDailyStreak function with this version that uses the user_daily_rewards table instead
-
 export async function getUserDailyStreak(userId: string) {
   const supabase = createServerClient()
   const today = new Date().toISOString().split("T")[0]
@@ -1145,13 +1141,12 @@ export async function getUserDailyStreak(userId: string) {
     const canCheckIn = !todayReward
 
     // Get user's streak by counting consecutive days
-    // Use distinct on claimed_at::date to handle potential duplicates
     const { data: recentRewards, error: recentError } = await supabase
       .from("user_daily_rewards")
       .select("claimed_at")
       .eq("user_id", userId)
       .order("claimed_at", { ascending: false })
-      .limit(30) // Get last 30 days to calculate streak
+      .limit(30)
 
     if (recentError) {
       console.error("Error fetching recent rewards:", recentError)
@@ -1224,8 +1219,6 @@ export async function getUserDailyStreak(userId: string) {
     return { streak: 0, canCheckIn: true, lastCheckIn: null, reward: 500 }
   }
 }
-
-// Replace the claimDailyReward function with this updated version that handles the unique constraint
 
 export async function claimDailyReward(userId: string) {
   const supabase = createServerClient()
@@ -1326,4 +1319,54 @@ export async function claimDailyReward(userId: string) {
     console.error("Error claiming daily reward:", error)
     return { success: false, message: "Error processing reward claim" }
   }
+}
+
+// Get tasks with their URLs
+export async function getTasksWithUrls() {
+  const supabase = createServerClient()
+  
+  // Get tasks from database
+  const { data: tasks, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .order("id", { ascending: true })
+
+  if (error) {
+    console.error("Error fetching tasks:", error)
+    return []
+  }
+
+  // Add URLs to tasks
+  const tasksWithUrls = tasks.map(task => {
+    let url = ""
+    switch (task.platform?.toLowerCase()) {
+      case "youtube":
+        url = "https://youtube.com/@swordcoin"
+        break
+      case "twitter":
+        url = "https://twitter.com/swordcoin"
+        break
+      case "telegram":
+        url = "https://t.me/swordcoin"
+        break
+      case "instagram":
+        url = "https://instagram.com/swordcoin"
+        break
+      case "facebook":
+        url = "https://facebook.com/swordcoin"
+        break
+      case "linkedin":
+        url = "https://linkedin.com/company/swordcoin"
+        break
+      case "binance":
+        url = "https://accounts.binance.com/register"
+        break
+      default:
+        url = task.link || ""
+    }
+    
+    return { ...task, url }
+  })
+
+  return tasksWithUrls
 }

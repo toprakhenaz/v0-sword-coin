@@ -7,7 +7,7 @@ import type { EnergyBarProps } from "@/types"
 import { useLeagueData } from "@/data/GeneralData"
 import { formatNumber } from "@/lib/utils"
 
-export default function EnergyBar({ energy, maxEnergy, boost, onOpenBoostOverlay, league }: EnergyBarProps) {
+export default function EnergyBar({ energy, maxEnergy, onOpenBoostOverlay, league }: EnergyBarProps) {
   const [isAnimating, setIsAnimating] = useState(false)
   const [prevEnergy, setPrevEnergy] = useState(energy)
   const { getLeagueColors } = useLeagueData()

@@ -7,7 +7,6 @@ import Image from "next/image"
 import { motion } from "framer-motion"
 
 interface EquipmentCardProps {
-  id: number
   name: string
   image: string
   level: number
@@ -18,7 +17,6 @@ interface EquipmentCardProps {
 }
 
 export default function EquipmentCard({
-  id,
   name,
   image,
   level,

@@ -45,6 +45,7 @@ export default function Popup({ title, message, image, onClose }: PopupProps) {
       clearTimeout(timer)
       clearTimeout(autoCloseTimer)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleClose = () => {

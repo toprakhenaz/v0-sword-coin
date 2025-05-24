@@ -25,11 +25,30 @@ import {
   faSort,
   faPlus,
   faFilter,
+  faGlobe,
+  faGift,
+  faCalendar,
+  faListCheck,
+  faBookOpen,
+  faPlay,
+  faLevelUpAlt,
+  faBell,
 } from "@fortawesome/free-solid-svg-icons"
 
+// Import brand icons
+import {
+  faYoutube,
+  faTwitter,
+  faTelegram,
+  faInstagram,
+  faFacebook,
+  faLinkedin,
+} from "@fortawesome/free-brands-svg-icons"
+
 export const icons = {
+  // General icons
   coins: faCoins,
-  swords: faGem, // Replace faSwords with faGem but keep the same key
+  swords: faGem, // Using faGem as sword alternative
   home: faHome,
   userGroup: faUserGroup,
   times: faTimes,
@@ -46,7 +65,7 @@ export const icons = {
   angleDoubleUp: faAngleDoubleUp,
   bolt: faBolt,
   rocket: faRocket,
-  pickaxe: faHammer, // Changed from faPickaxe to faHammer
+  pickaxe: faHammer, // Using faHammer as pickaxe alternative
   handPointer: faHandPointer,
   batteryFull: faBatteryFull,
   batteryHalf: faBatteryHalf,
@@ -54,4 +73,20 @@ export const icons = {
   sort: faSort,
   plus: faPlus,
   filter: faFilter,
+  globe: faGlobe,
+  gift: faGift,
+  calendar: faCalendar,
+  listCheck: faListCheck,
+  bookOpen: faBookOpen,
+  play: faPlay,
+  levelUp: faLevelUpAlt,
+  bell: faBell,
+  
+  // Brand icons
+  youtube: faYoutube,
+  twitter: faTwitter,
+  telegram: faTelegram,
+  instagram: faInstagram,
+  facebook: faFacebook,
+  linkedin: faLinkedin,
 }

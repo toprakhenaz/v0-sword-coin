@@ -35,10 +35,10 @@ export default function TimeBar() {
   // Update flip state and card status when found cards change
   useEffect(() => {
     setIsFlipped(dailyCombo.cardIds.map((cardId) => dailyCombo.foundCardIds.includes(cardId)))
-    setCardStatus(dailyCombo.cardIds.map((cardId) => (dailyCombo.foundCardIds.includes(cardId) ? "Card Found" : "")))
+    setCardStatus(dailyCombo.cardIds.map((cardId) => (dailyCombo.foundCardIds.includes(cardId) ? "Found" : "")))
   }, [dailyCombo.foundCardIds, dailyCombo.cardIds])
 
-  // Card flip animation
+  // Card flip animation - removed automatic reveal, now requires the user to find the card
   const toggleCardFlip = async (index: number) => {
     if (dailyCombo.foundCardIds.includes(dailyCombo.cardIds[index])) {
       // If card is already found, just toggle flip animation
@@ -46,34 +46,17 @@ export default function TimeBar() {
       newIsFlipped[index] = !newIsFlipped[index]
       setIsFlipped(newIsFlipped)
     } else {
-      // Try to find the card in the combo
+      // Card not found yet - show mystery state
       const newStatus = [...cardStatus]
-      newStatus[index] = "Checking..."
+      newStatus[index] = "Find this card in Mine!"
       setCardStatus(newStatus)
 
-      const result = await findComboCard(index)
-
-      if (result.success) {
-        // Show flip animation
-        const newIsFlipped = [...isFlipped]
-        newIsFlipped[index] = true
-        setIsFlipped(newIsFlipped)
-
-        // Update status
-        newStatus[index] = "Card Found"
-        setCardStatus(newStatus)
-      } else {
-        // Update status with error message
-        newStatus[index] = result.message || "Try again"
-        setCardStatus(newStatus)
-
-        // Clear status after 2 seconds
-        setTimeout(() => {
-          const resetStatus = [...cardStatus]
-          resetStatus[index] = ""
-          setCardStatus(resetStatus)
-        }, 2000)
-      }
+      // Clear status after 2 seconds
+      setTimeout(() => {
+        const resetStatus = [...cardStatus]
+        resetStatus[index] = ""
+        setCardStatus(resetStatus)
+      }, 2000)
     }
   }
 
@@ -128,7 +111,7 @@ export default function TimeBar() {
                   transform: isFlipped[index] && dailyCombo.foundCardIds.includes(cardId) ? "rotateY(180deg)" : "",
                 }}
               >
-                {/* Card front */}
+                {/* Card front - Always show mystery state */}
                 <div
                   className="absolute inset-0 rounded-lg border flex items-center justify-center"
                   style={{
@@ -146,7 +129,7 @@ export default function TimeBar() {
                   />
                 </div>
 
-                {/* Card back */}
+                {/* Card back - Only show if found */}
                 {dailyCombo.foundCardIds.includes(cardId) && (
                   <div
                     className="absolute inset-0 rounded-lg border overflow-hidden"

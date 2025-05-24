@@ -7,10 +7,9 @@ import HeaderCard from "@/components/HeaderCard"
 import Popup from "@/components/Popup"
 import EarnPageSkeletonLoading from "@/components/SkeletonEarn"
 import { useLeagueData } from "@/data/GeneralData"
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { icons } from "@/icons"
 import TaskCard from "@/components/Earn/TaskCard"
-import { getTokenListingDate, getUserDailyStreak, claimDailyReward } from "@/lib/db-actions"
+import { supabase } from "@/lib/supabase"
+import { getTokenListingDate, getUserDailyStreak, claimDailyReward, startTask, completeTask, getTasksWithUrls } from "@/lib/db-actions"
 import DailyCombo from "@/components/Earn/DailyCombo"
 import { setupDailyRewardsTable } from "@/lib/setup-daily-rewards"
 
@@ -25,6 +24,7 @@ interface Task {
   platform: string
   platformLogo: string
   userTaskId?: string
+  url?: string
 }
 
 interface CountdownTime {
@@ -167,88 +167,42 @@ export default function EarnPage() {
       if (!userId) return
 
       try {
-        // Simulated tasks data - in a real app, this would come from the database
-        const mockTasks: Task[] = [
-          {
-            id: 2,
-            title: "Follow on YouTube",
-            description: "YouTube kanalında zil butonuna tıklayın.",
-            reward: 15000,
-            progress: 0,
-            isCompleted: false,
-            category: "Social",
-            platform: "YouTube",
-            platformLogo: "youtube",
-          },
-          {
-            id: 3,
-            title: "Follow on Twitter",
-            description: "SwordCoin'i X platformunda takip edin.",
-            reward: 8000,
-            progress: 50,
-            isCompleted: false,
-            category: "Social",
-            platform: "Twitter",
-            platformLogo: "twitter",
-          },
-          {
-            id: 4,
-            title: "Follow on LinkedIn",
-            description: "SwordCoin'i LinkedIn'de takip edin.",
-            reward: 3000,
-            progress: 0,
-            isCompleted: false,
-            category: "Social",
-            platform: "LinkedIn",
-            platformLogo: "",
-          },
-          {
-            id: 5,
-            title: "Follow on Facebook",
-            description: "Facebook'ta SwordCoin'i takip edin.",
-            reward: 3000,
-            progress: 0,
-            isCompleted: false,
-            category: "Social",
-            platform: "Facebook",
-            platformLogo: "",
-          },
-          {
-            id: 6,
-            title: "Follow on Instagram",
-            description: "SwordCoin'i Instagram'da takip edin.",
-            reward: 1000,
-            progress: 100,
-            isCompleted: true,
-            category: "Social",
-            platform: "Instagram",
-            platformLogo: "instagram",
-          },
-          {
-            id: 7,
-            title: "Join Telegram Group",
-            description: "SwordCoin Telegram grubuna katılın.",
-            reward: 5000,
-            progress: 0,
-            isCompleted: false,
-            category: "Social",
-            platform: "Telegram",
-            platformLogo: "telegram",
-          },
-          {
-            id: 8,
-            title: "Verify on Binance",
-            description: "Binance hesabınızı bağlayın.",
-            reward: 10000,
-            progress: 0,
-            isCompleted: false,
-            category: "Crypto",
-            platform: "Binance",
-            platformLogo: "binance",
-          },
-        ]
+        // Get tasks with URLs from database
+        const tasksData = await getTasksWithUrls()
 
-        setTasks(mockTasks)
+        // Get user's task progress
+        const { data: userTasks } = await supabase
+          .from("user_tasks")
+          .select("*")
+          .eq("user_id", userId)
+
+        // Create a map of user tasks for quick lookup
+        const userTasksMap = new Map()
+        if (userTasks) {
+          userTasks.forEach(task => {
+            userTasksMap.set(task.task_id, task)
+          })
+        }
+
+        // Merge tasks with user progress
+        const mergedTasks = tasksData.map(task => {
+          const userTask = userTasksMap.get(task.id)
+          return {
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            reward: task.reward,
+            progress: userTask?.progress || 0,
+            isCompleted: userTask?.is_completed || false,
+            category: task.category,
+            platform: task.platform,
+            platformLogo: task.platform?.toLowerCase() || "",
+            userTaskId: userTask?.id,
+            url: task.url
+          }
+        })
+
+        setTasks(mergedTasks)
         setIsLoading(false)
       } catch (error) {
         console.error("Error loading tasks:", error)
@@ -280,54 +234,72 @@ export default function EarnPage() {
   const handleStartTask = async (taskId: number) => {
     // Find the task
     const task = tasks.find((t) => t.id === taskId)
-    if (!task) return
+    if (!task || !userId) return
 
-    // Update task progress
-    const updatedTasks = tasks.map((t) => {
-      if (t.id === taskId) {
-        // If progress is 0, set to 50%, otherwise set to 100%
-        const newProgress = t.progress === 0 ? 50 : 100
-        return { ...t, progress: newProgress }
+    try {
+      // Start the task and get the URL
+      const result = await startTask(userId, taskId, task.url)
+      
+      if (result.success) {
+        // Update task progress locally
+        const updatedTasks = tasks.map((t) => {
+          if (t.id === taskId) {
+            return { ...t, progress: result.progress || 50 }
+          }
+          return t
+        })
+        setTasks(updatedTasks)
+
+        // Open the URL in a new tab
+        if (result.url) {
+          window.open(result.url, '_blank')
+        }
+
+        // Show popup for starting task
+        setPopupData({
+          title: "Task Started",
+          message: `You've started "${task.title}". Complete the action to claim your reward!`,
+          image: task.platformLogo || "/coin.png",
+        })
+        setShowPopup(true)
       }
-      return t
-    })
-
-    setTasks(updatedTasks)
-
-    // Show popup for starting task
-    setPopupData({
-      title: "Task Started",
-      message: `You've started "${task.title}"`,
-      image: task.platformLogo || "/coin.png",
-    })
-    setShowPopup(true)
+    } catch (error) {
+      console.error("Error starting task:", error)
+    }
   }
 
   const handleClaimReward = async (taskId: number) => {
     // Find the task
     const task = tasks.find((t) => t.id === taskId)
-    if (!task || task.progress !== 100 || task.isCompleted) return
+    if (!task || task.progress !== 100 || task.isCompleted || !userId) return
 
-    // Update task as completed
-    const updatedTasks = tasks.map((t) => {
-      if (t.id === taskId) {
-        return { ...t, isCompleted: true }
+    try {
+      const result = await completeTask(userId, taskId)
+      
+      if (result.success) {
+        // Update task as completed locally
+        const updatedTasks = tasks.map((t) => {
+          if (t.id === taskId) {
+            return { ...t, isCompleted: true }
+          }
+          return t
+        })
+        setTasks(updatedTasks)
+
+        // Add tokens to user
+        await updateCoins(result.reward || task.reward, "task_reward", `Completed task ${taskId}`)
+
+        // Show success popup
+        setPopupData({
+          title: "Task Completed!",
+          message: `You earned ${(result.reward || task.reward).toLocaleString()} tokens!`,
+          image: "/coin.png",
+        })
+        setShowPopup(true)
       }
-      return t
-    })
-
-    setTasks(updatedTasks)
-
-    // Add tokens to user
-    await updateCoins(task.reward, "task_reward", `Completed task ${taskId}`)
-
-    // Show success popup
-    setPopupData({
-      title: "Task Completed!",
-      message: `You earned ${task.reward.toLocaleString()} tokens!`,
-      image: "/coin.png",
-    })
-    setShowPopup(true)
+    } catch (error) {
+      console.error("Error completing task:", error)
+    }
   }
 
   const handleTaskAction = (taskId: number) => {
@@ -336,13 +308,30 @@ export default function EarnPage() {
 
     if (task.progress === 100 && !task.isCompleted) {
       handleClaimReward(taskId)
-    } else {
+    } else if (task.progress === 0) {
       handleStartTask(taskId)
+    } else {
+      // Task is in progress, increase progress to 100%
+      const updatedTasks = tasks.map((t) => {
+        if (t.id === taskId) {
+          return { ...t, progress: 100 }
+        }
+        return t
+      })
+      setTasks(updatedTasks)
+      
+      // Show popup that task is ready to claim
+      setPopupData({
+        title: "Task Ready",
+        message: `"${task.title}" is ready to claim!`,
+        image: task.platformLogo || "/coin.png",
+      })
+      setShowPopup(true)
     }
   }
 
   const handleDailyCheckIn = async () => {
-    if (isDailyCheckedIn) return
+    if (isDailyCheckedIn || !userId) return
 
     try {
       const result = await claimDailyReward(userId)
@@ -350,8 +339,11 @@ export default function EarnPage() {
       if (result.success) {
         // Update local state
         setIsDailyCheckedIn(true)
-        setDailyStreak(result.streak)
-        setStreakDay(result.streakDay)
+        setDailyStreak(result.streak || 0)
+        setStreakDay(result.streakDay || 1)
+
+        // Update coins
+        await updateCoins(result.reward || 0, "daily_reward", "Daily check-in reward")
 
         // Show success popup
         setPopupData({
@@ -523,22 +515,4 @@ export default function EarnPage() {
       <Navbar />
     </main>
   )
-}
-
-// Helper function for category icons
-function getCategoryIcon(category: string) {
-  switch (category) {
-    case "All":
-      return <FontAwesomeIcon icon={icons.listCheck} className="text-gray-300" />
-    case "Daily":
-      return <FontAwesomeIcon icon={icons.calendar} className="text-gray-300" />
-    case "Crypto":
-      return <FontAwesomeIcon icon={icons.coins} className="text-yellow-400" />
-    case "Social":
-      return <FontAwesomeIcon icon={icons.userGroup} className="text-gray-300" />
-    case "Learn":
-      return <FontAwesomeIcon icon={icons.bookOpen} className="text-gray-300" />
-    default:
-      return <FontAwesomeIcon icon={icons.listCheck} className="text-gray-300" />
-  }
 }

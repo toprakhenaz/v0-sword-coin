@@ -41,8 +41,13 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
     return () => clearInterval(timer)
   }, [])
 
-  // Handle button press with touch and click support
+  // Handle button press with touch and click support - Fixed preventDefault issue
   const handleButtonPress = (e: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
+    // Prevent default only for touch events to avoid scrolling
+    if ("touches" in e && e.type === "touchstart") {
+      e.preventDefault()
+    }
+
     // If energy is depleted, just call onClick without effects
     if (isEnergyDepleted) {
       onClick()
@@ -51,11 +56,6 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
 
     // If we're already showing effects, don't trigger again too quickly
     if (showRipple) return
-
-    // Prevent default for touch events to avoid scrolling
-    if ("touches" in e) {
-      e.preventDefault()
-    }
 
     // Calculate ripple position relative to button
     const button = e.currentTarget
@@ -188,6 +188,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
         className="relative overflow-hidden z-10 outline-none focus:outline-none"
         onClick={handleButtonPress}
         onTouchStart={handleButtonPress}
+        onMouseDown={(e) => e.preventDefault()} // Prevent text selection
         style={{
           width: "14rem",
           height: "14rem",
@@ -209,6 +210,7 @@ export default function CentralButton({ onClick, league }: CentralButtonProps) {
           borderColor: isEnergyDepleted ? `${colors.secondary}60` : colors.secondary, // Dimmed border when energy depleted
           WebkitTapHighlightColor: "transparent", // Remove tap highlight on mobile
           opacity: isEnergyDepleted ? 0.7 : 1, // Dim the button when energy is depleted
+          touchAction: "manipulation", // Prevent zoom on double tap
         }}
       >
         {/* Ripple effect - only shown when energy is available */}

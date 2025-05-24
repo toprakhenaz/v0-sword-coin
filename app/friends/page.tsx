@@ -13,7 +13,7 @@ import { supabase } from "@/lib/supabase"
 import { claimReferralReward, getUserReferrals } from "@/lib/db-actions"
 
 export default function FriendsPage() {
-  const { userId, coins, league, telegramId, updateCoins, refreshUserData } = useUser()
+  const { userId, coins, league, telegramId, refreshUserData } = useUser()
   const [showModal, setShowModal] = useState(false)
   const [showAlert, setShowAlert] = useState(false)
   const [collectingId, setCollectingId] = useState<string | null>(null)
